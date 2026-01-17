@@ -81,7 +81,8 @@
         Loader: (p) => <IconBase {...p} className={`${p.className || ''} animate-spin`}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>,
         FileText: (p) => <IconBase {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></IconBase>,
         Upload: (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></IconBase>,
-        Globe: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></IconBase>
+        Globe: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></IconBase>,
+        HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>
       };
 
       // --- DB HELPER (IndexedDB para archivos) ---
@@ -148,9 +149,10 @@
       };
 
       // --- GEMINI API BATCH FETCHING ---
-      // Ahora recibe sourceConfig: { type: 'pdf' | 'internet', content: string, name: string }
       const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
+          // Si las claves nuevas fallan, prueba cambiar esto a "gemini-1.5-flash"
           const MODEL = "gemini-2.0-flash"; 
+          
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           
@@ -217,7 +219,6 @@
               if(startInfo !== -1 && endInfo !== -1) text = text.substring(startInfo, endInfo + 1);
 
               const parsed = JSON.parse(text);
-              // Inyectar el origen en cada pregunta
               return parsed.map(q => ({
                   ...q,
                   origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]`
@@ -253,6 +254,9 @@
                   } else {
                       const err = await response.json();
                       let errMsg = err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err);
+                      if(response.status === 404) {
+                         errMsg += "\n\nCONSEJO: Puede que tu clave no tenga acceso a Gemini 2.0 Flash. Intenta crear una nueva clave en un proyecto habilitado o cambiar el modelo en el código.";
+                      }
                       setTestStatus('error');
                       setErrorDetail(errMsg);
                   }
@@ -264,7 +268,7 @@
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
-                          <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Motor: Gemini 2.0 Flash</p></div>
+                          <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Motor: Gemini 2.0 Flash (Experimental)</p></div>
                       </div>
                       <div className="space-y-6">
                           <div>
@@ -278,6 +282,17 @@
                               </div>
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                           </div>
+                          
+                          {/* AYUDA RESTAURADA */}
+                          <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+                              <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key GRATIS?</h4>
+                              <ol className="text-sm text-slate-300 space-y-2 list-decimal pl-4 mb-4">
+                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google.</li>
+                                  <li>Haz clic en el botón <strong>"Get API key"</strong>.</li>
+                                  <li>Crea una clave en un proyecto nuevo.</li>
+                              </ol>
+                              <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
+                          </div>
                       </div>
                   </div>
               </div>
@@ -290,14 +305,13 @@
           const [pdfProcessing, setPdfProcessing] = useState(false);
           const [pdfProgress, setPdfProgress] = useState(0);
           
-          // Estructura actualizada con array de archivos
           const defaultSubject = { 
               id: null, name: '', type: '', 
               qCount: 50, cutOffPct: 85, timeMinutes: 60, 
               pointsHit: 3, pointsMiss: -1, pointsSkip: 0, 
               optionsCount: 4, 
               topics: [{ name: 'Temario General', pct: 100 }], 
-              files: [] // [{id, name, pct}]
+              files: [] 
           };
 
           const handleNew = () => { 
@@ -306,7 +320,6 @@
           };
           
           const handleEdit = (sub) => { 
-              // Migración on-the-fly para versiones antiguas
               const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] };
               setEditForm(safeSub);
               setIsEditing(true); 
@@ -314,7 +327,6 @@
 
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
-              // Validar porcentajes si hay archivos
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               if (totalPdfPct > 100) return alert(`El porcentaje total de los PDFs (${totalPdfPct}%) excede el 100%.`);
               
@@ -324,13 +336,10 @@
 
           const handleDelete = async (id, sub) => { 
               if (confirm("¿Borrar materia y todos sus documentos anexos?")) { 
-                  // Limpiar DB de archivos
                   if(sub.files) {
                       for(const f of sub.files) await deleteFromDB(f.id);
                   }
-                  // Compatibilidad antigua
                   await deleteFromDB(id); 
-                  
                   setSubjects(prev => prev.filter(s => s.id !== id)); 
                   if (activeSubjectId === id) setActiveSubjectId(null); 
               }
@@ -338,7 +347,6 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
-          // Gestión de subida de PDF
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
@@ -363,13 +371,12 @@
                   const fileId = `${editForm.id}_${Date.now()}`;
                   await saveToDB(fileId, fullText);
                   
-                  // Añadir a la lista de archivos con un % por defecto (repartir restante o 0)
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const remaining = Math.max(0, 100 - currentTotal);
                   
                   setEditForm(prev => ({
                       ...prev,
-                      files: [...prev.files, { id: fileId, name: file.name, pct: remaining }] // Sugerir restante
+                      files: [...prev.files, { id: fileId, name: file.name, pct: remaining }] 
                   }));
 
               } catch (err) {
@@ -519,7 +526,6 @@
           const [loadingMsg, setLoadingMsg] = useState('');
           const [error, setError] = useState(null);
           
-          // Cola de lotes planificados para cumplir los porcentajes
           const [batchQueue, setBatchQueue] = useState([]); 
           
           const [apiKey] = usePersistentState('gemini_api_key', '');
@@ -534,30 +540,26 @@
 
           useEffect(() => {
               if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) {
-                  // Cargar más si quedan menos de 5
                   if (questions.length - currentIndex < 5) loadNextBatch();
               }
           }, [currentIndex, status, questions.length]);
 
-          // Planificador de Lotes
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
               const files = activeSubject.files || [];
               const totalPdfPct = files.reduce((s,f) => s + (f.pct||0), 0);
               const internetPct = Math.max(0, 100 - totalPdfPct);
               
-              let plan = []; // { type: 'pdf'|'internet', id: '...', name: '...', targetCount: 10 }
+              let plan = []; 
               
-              // Calcular cuantas preguntas por fuente
               files.forEach(f => {
                   const count = Math.round((f.pct / 100) * totalQs);
                   if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count });
               });
               
-              const internetCount = totalQs - plan.reduce((s,p) => s + p.count, 0); // Resto exacto
+              const internetCount = totalQs - plan.reduce((s,p) => s + p.count, 0); 
               if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: internetCount });
               
-              // Convertir a lotes de 5
               const BATCH_SIZE = 5;
               let queue = [];
               
@@ -570,11 +572,6 @@
                   }
               });
               
-              // Mezclar la cola para variedad o dejarla secuencial para optimizar contexto?
-              // Secuencial es mejor para rendimiento (no recargar PDF grande a la IA constantemente)
-              // Pero el usuario prefiere mezcla. 
-              // Compromiso: No mezclar aleatoriamente completo, pero si intercalar si es posible.
-              // Por ahora SECUENCIAL por estabilidad de la API.
               return queue;
           };
 
@@ -582,10 +579,9 @@
               if (isFetchingRef.current || batchQueue.length === 0) return;
               isFetchingRef.current = true;
               
-              const nextBatch = batchQueue[0]; // Peek
+              const nextBatch = batchQueue[0]; 
               
               try {
-                  // Preparar contenido
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '' };
                   if (nextBatch.type === 'pdf') {
                       const text = await getFromDB(nextBatch.id);
@@ -596,14 +592,11 @@
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
                   
                   if (newQs && newQs.length > 0) {
-                      // Fix IDs y añadir
                       setQuestions(prev => [...prev, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
-                      // Eliminar lote completado de la cola
                       setBatchQueue(prev => prev.slice(1));
                   }
               } catch (e) { 
                   console.log("Error fetching batch:", e); 
-                  // Si falla, intentamos de nuevo en unos segundos sin quitar de la cola
               } finally { 
                   setTimeout(() => { isFetchingRef.current = false; }, 4000); 
               }
@@ -613,7 +606,6 @@
               if (!activeSubject) return alert("Selecciona materia.");
               if (!apiKey) return alert("Falta API Key.");
               
-              // Generar plan
               const queue = generateBatchPlan();
               if(queue.length === 0) return alert("Error en configuración: 0 preguntas planificadas.");
               setBatchQueue(queue);
@@ -622,7 +614,6 @@
               setLoadingMsg('Planificando examen y generando primeras preguntas...'); 
               setError(null);
               
-              // Forzar primer fetch manualmente usando el queue recién creado
               isFetchingRef.current = true;
               const firstBatch = queue[0];
               
@@ -641,7 +632,7 @@
                   setAnswers({}); 
                   setCurrentIndex(0); 
                   setTimeLeft(activeSubject.timeMinutes * 60); 
-                  setBatchQueue(queue.slice(1)); // Quitar el primero
+                  setBatchQueue(queue.slice(1)); 
                   setStatus('active');
                   
               } catch (e) { 

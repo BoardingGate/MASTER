@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -151,9 +150,9 @@
 
       // --- GEMINI API BATCH FETCHING ---
       const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
-          // LEER MODELO PREFERIDO O USAR DEFAULT 2.0-FLASH
           const savedModel = window.localStorage.getItem('gemini_model');
-          const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-2.0-flash";
+          // Por defecto ahora usamos Gemini 3 Flash si no hay nada guardado
+          const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
           
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
@@ -163,73 +162,56 @@
           if (sourceConfig.type === 'pdf') {
               contextInstruction = `
                 --- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) ---
-                ${sourceConfig.content.substring(0, 950000)}
+                ${sourceConfig.content.substring(0, 900000)}
                 --- FIN CONTEXTO ---
-                
-                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean fieles al texto.
+                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado.
               `;
           } else {
               contextInstruction = `
-                Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}.
+                Temas a tratar: ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}.
                 INSTRUCCIÓN: Usa tu conocimiento general para generar preguntas sobre estos temas.
               `;
           }
 
           const prompt = `
-            Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}).
+            Actúa como tribunal experto. Materia: "${subject.name}".
             ${contextInstruction}
-
             Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta).
             IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}).
-            NO repetir preguntas anteriores.
-            Añade el campo "topic" indicando el subtema específico.
-            
             Responde ÚNICAMENTE con JSON válido:
             [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]
           `;
 
-          const safetySettings = [
-              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-          ];
-
           try {
+              // Forzamos v1beta para asegurar compatibilidad con Gemini 3 y 2.0
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                       contents: [{ parts: [{ text: prompt }] }],
-                      safetySettings: safetySettings,
-                      generationConfig: { temperature: 0.6 }
+                      generationConfig: { temperature: 0.7 }
                   })
               });
 
               if (!response.ok) {
                   const errData = await response.json();
-                  throw new Error(JSON.stringify(errData, null, 2)); 
+                  throw new Error(errData.error?.message || "Error en la respuesta de API");
               }
 
               const data = await response.json();
-              if (!data.candidates || data.candidates.length === 0) throw new Error("Respuesta vacía de IA");
-
               let text = data.candidates[0].content.parts[0].text || "[]";
               text = text.replace(/```json/g, '').replace(/```/g, '').trim();
               const startInfo = text.indexOf('[');
               const endInfo = text.lastIndexOf(']');
               if(startInfo !== -1 && endInfo !== -1) text = text.substring(startInfo, endInfo + 1);
 
-              const parsed = JSON.parse(text);
-              return parsed.map(q => ({
+              return JSON.parse(text).map(q => ({
                   ...q,
                   origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]`
               }));
-
           } catch (e) {
               console.warn("Fallo en lote:", e);
-              if(e.message.includes("API key")) throw e;
-              return []; 
+              throw e;
           }
       };
 
@@ -237,7 +219,7 @@
 
       const SettingsTab = () => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
-          const [model, setModel] = usePersistentState('gemini_model', 'gemini-2.0-flash');
+          const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
           const [showKey, setShowKey] = useState(false);
           const [testStatus, setTestStatus] = useState(null); 
           const [errorDetail, setErrorDetail] = useState('');
@@ -256,9 +238,8 @@
                       setTestStatus('success');
                   } else {
                       const err = await response.json();
-                      let errMsg = err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err);
                       setTestStatus('error');
-                      setErrorDetail(errMsg);
+                      setErrorDetail(err.error?.message || JSON.stringify(err));
                   }
               } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
           };
@@ -282,9 +263,11 @@
                                   <div className="flex-1">
                                       <label className="block text-xs font-bold text-slate-400 mb-1">Modelo de IA</label>
                                       <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm focus:outline-none">
-                                          <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recomendado/Experimental)</option>
-                                          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estable/Rápido)</option>
-                                          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Lento/Más listo)</option>
+                                          <option value="gemini-3-flash-preview">Gemini 3 Flash (Nuevo / Recomendado)</option>
+                                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Máxima capacidad)</option>
+                                          <option value="gemini-2.0-flash">Gemini 2.0 Flash (Experimental)</option>
+                                          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estable)</option>
+                                          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Lento/Potente)</option>
                                       </select>
                                   </div>
                                   <button onClick={testConnection} className={`h-[46px] px-6 rounded-xl border font-bold text-sm ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>{testStatus === 'loading' ? <Icons.Loader/> : 'PROBAR CONEXIÓN'}</button>
@@ -293,15 +276,9 @@
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                           </div>
                           
-                          {/* AYUDA */}
                           <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
-                              <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
-                              <ol className="text-sm text-slate-300 space-y-2 list-decimal pl-4 mb-4">
-                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google.</li>
-                                  <li>Haz clic en el botón <strong>"Get API key"</strong>.</li>
-                                  <li>Crea una clave en un proyecto nuevo.</li>
-                                  <li className="text-yellow-400">Si tu clave falla con "Gemini 2.0", prueba a cambiar el selector de arriba a "Gemini 1.5 Flash".</li>
-                              </ol>
+                              <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> Ayuda</h4>
+                              <p className="text-sm text-slate-300 mb-4">Si recibes un error 404, prueba a usar el modelo <strong>Gemini 3 Flash</strong> o <strong>1.5 Flash</strong> con una API Key válida de AI Studio.</p>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
                           </div>
                       </div>
@@ -346,7 +323,7 @@
           };
 
           const handleDelete = async (id, sub) => { 
-              if (confirm("¿Borrar materia y todos sus documentos anexos?")) { 
+              if (confirm("¿Borrar materia?")) { 
                   if(sub.files) {
                       for(const f of sub.files) await deleteFromDB(f.id);
                   }
@@ -360,67 +337,40 @@
 
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
-              if (!file) return;
-              if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
-
+              if (!file || file.type !== 'application/pdf') return alert("Solo PDF");
               setPdfProcessing(true);
               setPdfProgress(0);
-
               try {
                   const arrayBuffer = await file.arrayBuffer();
                   const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
                   let fullText = "";
-                  
                   for (let i = 1; i <= pdf.numPages; i++) {
                       const page = await pdf.getPage(i);
                       const textContent = await page.getTextContent();
-                      const pageText = textContent.items.map(item => item.str).join(' ');
-                      fullText += pageText + "\n";
+                      fullText += textContent.items.map(item => item.str).join(' ') + "\n";
                       setPdfProgress(Math.round((i / pdf.numPages) * 100));
                   }
-
                   const fileId = `${editForm.id}_${Date.now()}`;
                   await saveToDB(fileId, fullText);
-                  
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const remaining = Math.max(0, 100 - currentTotal);
-                  
-                  setEditForm(prev => ({
-                      ...prev,
-                      files: [...prev.files, { id: fileId, name: file.name, pct: remaining }] 
-                  }));
-
-              } catch (err) {
-                  console.error(err);
-                  alert("Error al leer el PDF.");
-              } finally {
-                  setPdfProcessing(false);
-              }
+                  setEditForm(prev => ({...prev, files: [...prev.files, { id: fileId, name: file.name, pct: remaining }]}));
+              } catch (err) { alert("Error al leer PDF."); } finally { setPdfProcessing(false); }
           };
 
           const handleDeleteFile = async (idx) => {
               const file = editForm.files[idx];
               await deleteFromDB(file.id);
-              const newFiles = editForm.files.filter((_, i) => i !== idx);
-              setEditForm({...editForm, files: newFiles});
-          };
-
-          const handleFilePctChange = (idx, val) => {
-              const newFiles = [...editForm.files];
-              newFiles[idx].pct = parseFloat(val) || 0;
-              setEditForm({...editForm, files: newFiles});
+              setEditForm({...editForm, files: editForm.files.filter((_, i) => i !== idx)});
           };
 
           if (isEditing) {
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               const internetPct = Math.max(0, 100 - totalPdfPct);
-
               return (
                   <div className="h-full flex flex-col p-4 overflow-y-auto">
                       <div className="max-w-4xl mx-auto w-full pb-20">
-                          <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> {editForm.name ? 'Editar' : 'Nueva'} Materia</h3>
-                          
-                          {/* PANEL PRINCIPAL */}
+                          <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> Materia</h3>
                           <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Nombre</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
@@ -433,94 +383,44 @@
                                   <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
                               </div>
                           </div>
-
-                          {/* PANEL DOCUMENTACIÓN (PDFs) */}
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
                               <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentación Anexa (PDFs)</h4>
-                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
-                                      <Icons.Upload size={14}/> {pdfProcessing ? `Leyendo ${pdfProgress}%` : "Añadir PDF"}
+                                  <h4 className="text-sm font-bold text-blue-400 flex items-center gap-2"><Icons.FileText size={16}/> PDFs</h4>
+                                  <label className="cursor-pointer bg-blue-600 px-3 py-1 rounded text-xs font-bold flex items-center gap-2">
+                                      <Icons.Upload size={14}/> {pdfProcessing ? `${pdfProgress}%` : "Añadir"}
                                       <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
                                   </label>
                               </div>
-
-                              <div className="space-y-2 mb-4">
-                                  {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos. Todo el examen se basará en Internet.</div>}
-                                  
-                                  {editForm.files.map((file, idx) => (
-                                      <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
-                                          <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
-                                          <div className="flex-1 min-w-0">
-                                              <div className="text-sm font-bold truncate text-white">{file.name}</div>
-                                              <div className="text-[10px] text-slate-400">ID: {file.id.slice(-6)}</div>
-                                          </div>
-                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
-                                              <span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span>
-                                              <input type="number" value={file.pct} onChange={e => handleFilePctChange(idx, e.target.value)} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
-                                              <span className="text-xs font-bold text-slate-500 pr-1">%</span>
-                                          </div>
-                                          <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Icons.Trash2 size={16}/></button>
-                                      </div>
-                                  ))}
-                              </div>
-
-                              <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
-                                  <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
-                                  <div className="flex items-center gap-4 text-xs font-mono">
-                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span>
-                                      <span className="text-slate-600">|</span>
-                                      <span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
+                              {editForm.files.map((file, idx) => (
+                                  <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded mb-2 border border-slate-700">
+                                      <div className="flex-1 text-sm truncate text-white">{file.name}</div>
+                                      <input type="number" value={file.pct} onChange={e => {const f=[...editForm.files]; f[idx].pct=parseFloat(e.target.value); setEditForm({...editForm, files:f})}} className="w-12 bg-slate-900 text-right text-xs" />
+                                      <button onClick={() => handleDeleteFile(idx)} className="text-red-400"><Icons.Trash2 size={16}/></button>
                                   </div>
-                              </div>
-                              {totalPdfPct > 100 && <div className="text-red-400 text-xs font-bold mt-2 text-right">Error: La suma excede el 100%</div>}
-                          </div>
-
-                          {/* PANEL TEMAS (INTERNET) */}
-                          <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
-                              <div className="flex justify-between items-center mb-4">
-                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
-                                  <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
-                              </div>
-                              {internetPct === 0 && <div className="text-xs text-yellow-500 mb-2 font-bold">Nota: Al asignar el 100% a los PDFs, no se usarán estos temas.</div>}
-                              {editForm.topics.map((t, idx) => (
-                                  <div key={idx} className="flex gap-2 mb-2 items-center"><input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} /><div className="relative w-24"><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6 font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span></div><button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button></div>
                               ))}
                           </div>
-
-                          {/* PANEL BAREMO */}
-                          <div className="glass-panel p-6 rounded-xl">
-                              <h4 className="text-sm font-bold text-slate-400 mb-3 uppercase tracking-wider">Baremo</h4>
-                              <div className="grid grid-cols-3 gap-4">
-                                  <div><label className="text-xs font-bold text-green-400 block mb-1">Acierto</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-green-400 font-bold text-right" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-red-400 block mb-1">Fallo</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-red-400 font-bold text-right" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-slate-400 block mb-1">Omisión</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
-                              </div>
+                          <div className={`glass-panel p-6 rounded-xl mb-6 ${internetPct === 0 ? 'opacity-50' : ''}`}>
+                              <div className="flex justify-between items-center mb-4"><label className="text-sm font-bold text-slate-300">Temas Internet ({internetPct}%)</label><button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-2 py-1 rounded">+ Tema</button></div>
+                              {editForm.topics.map((t, idx) => (
+                                  <div key={idx} className="flex gap-2 mb-2"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} /><input type="number" className="w-16 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} /><button onClick={() => setEditForm({...editForm, topics: editForm.topics.filter((_, i) => i !== idx)})} className="text-red-400"><Icons.Trash2 size={16}/></button></div>
+                              ))}
                           </div>
-                          
-                          <div className="flex gap-4 pt-6 mt-4 border-t border-slate-700">
-                              <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
-                              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar</button>
-                          </div>
+                          <div className="flex gap-4"><button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar</button></div>
                       </div>
                   </div>
               );
           }
 
           return (
-              <div className="h-full flex flex-col p-6 fade-in overflow-y-auto">
+              <div className="h-full flex flex-col p-6 overflow-y-auto">
                   <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Icons.Plus size={20}/> Nueva</button></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-                      {subjects.map(sub => {
-                           const fileCount = sub.files ? sub.files.length : 0;
-                           return (
-                              <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
-                                  {fileCount > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {fileCount} PDF(s)</div>}
-                                  <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div>{activeSubjectId === sub.id && <div className="bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase">Seleccionada</div>}</div>
-                                  <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                                  <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
-                              </div>
-                           )
-                      })}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {subjects.map(sub => (
+                          <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500' : 'bg-slate-900/50 border-slate-700'}`}>
+                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4>
+                              <div className="flex justify-end gap-2 mt-4"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 text-red-400"><Icons.Trash2 size={18}/></button></div>
+                          </div>
+                      ))}
                   </div>
               </div>
           );
@@ -536,9 +436,7 @@
           const [showGrid, setShowGrid] = useState(false);
           const [loadingMsg, setLoadingMsg] = useState('');
           const [error, setError] = useState(null);
-          
           const [batchQueue, setBatchQueue] = useState([]); 
-          
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
@@ -555,114 +453,46 @@
               }
           }, [currentIndex, status, questions.length]);
 
-          const generateBatchPlan = () => {
-              const totalQs = activeSubject.qCount;
-              const files = activeSubject.files || [];
-              const totalPdfPct = files.reduce((s,f) => s + (f.pct||0), 0);
-              const internetPct = Math.max(0, 100 - totalPdfPct);
-              
-              let plan = []; 
-              
-              files.forEach(f => {
-                  const count = Math.round((f.pct / 100) * totalQs);
-                  if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count });
-              });
-              
-              const internetCount = totalQs - plan.reduce((s,p) => s + p.count, 0); 
-              if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: internetCount });
-              
-              const BATCH_SIZE = 5;
-              let queue = [];
-              
-              plan.forEach(source => {
-                  let remain = source.count;
-                  while(remain > 0) {
-                      const amount = Math.min(remain, BATCH_SIZE);
-                      queue.push({ ...source, amount: amount });
-                      remain -= amount;
-                  }
-              });
-              
-              return queue;
-          };
-
           const loadNextBatch = async () => {
               if (isFetchingRef.current || batchQueue.length === 0) return;
               isFetchingRef.current = true;
-              
               const nextBatch = batchQueue[0]; 
-              
               try {
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '' };
                   if (nextBatch.type === 'pdf') {
-                      const text = await getFromDB(nextBatch.id);
-                      if (!text) throw new Error(`PDF ${nextBatch.name} no encontrado en memoria.`);
-                      sourceConfig.content = text;
+                      sourceConfig.content = await getFromDB(nextBatch.id);
                   }
-                  
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  
-                  // --- LÓGICA DE DEDUPLICACIÓN ---
-                  // 1. Obtener textos existentes normalizados
-                  const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
-                  // 2. Filtrar preguntas nuevas que ya existan
-                  const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
-                  
-                  if (uniqueNewQs.length > 0) {
-                      setQuestions(prev => [...prev, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
-                      setBatchQueue(prev => prev.slice(1));
-                  } else {
-                      // Si todas eran repetidas, simplemente avanzamos la cola para no bloquear, 
-                      // esperando que el siguiente lote sea mejor.
-                      console.warn("Lote descartado por duplicados.");
+                  if (newQs.length > 0) {
+                      setQuestions(prev => [...prev, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
                       setBatchQueue(prev => prev.slice(1));
                   }
-              } catch (e) { 
-                  console.log("Error fetching batch:", e); 
-              } finally { 
-                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
-              }
+              } catch (e) { console.warn(e); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const startExam = async () => {
-              if (!activeSubject) return alert("Selecciona materia.");
-              if (!apiKey) return alert("Falta API Key.");
-              
-              const queue = generateBatchPlan();
-              if(queue.length === 0) return alert("Error en configuración: 0 preguntas planificadas.");
-              setBatchQueue(queue);
-              
-              setStatus('loading'); 
-              setLoadingMsg('Planificando examen y generando primeras preguntas...'); 
-              setError(null);
-              
-              isFetchingRef.current = true;
-              const firstBatch = queue[0];
-              
-              try {
-                  let sourceConfig = { type: firstBatch.type, name: firstBatch.name, content: '' };
-                  if (firstBatch.type === 'pdf') {
-                      const text = await getFromDB(firstBatch.id);
-                      if(!text) throw new Error("No se encuentra el PDF en BBDD");
-                      sourceConfig.content = text;
+              if (!activeSubject || !apiKey) return alert("Configura Materia y API Key.");
+              const totalQs = activeSubject.qCount;
+              const files = activeSubject.files || [];
+              let queue = [];
+              files.forEach(f => {
+                  const count = Math.round((f.pct / 100) * totalQs);
+                  if(count > 0) {
+                      let r = count; while(r > 0) { const a = Math.min(r, 5); queue.push({type:'pdf', id:f.id, name:f.name, amount:a}); r -= a; }
                   }
-
-                  const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sourceConfig);
-                  if (!initialQs || initialQs.length === 0) throw new Error("La IA no generó preguntas.");
-                  
-                  setQuestions(initialQs.map((q, i) => ({ ...q, id: i })));
-                  setAnswers({}); 
-                  setCurrentIndex(0); 
-                  setTimeLeft(activeSubject.timeMinutes * 60); 
-                  setBatchQueue(queue.slice(1)); 
-                  setStatus('active');
-                  
-              } catch (e) { 
-                  setError(e.message); 
-                  setStatus('idle'); 
-              } finally {
-                  setTimeout(() => { isFetchingRef.current = false; }, 4000);
+              });
+              const internetTotal = totalQs - queue.reduce((s,p) => s + p.amount, 0);
+              if(internetTotal > 0) {
+                  let r = internetTotal; while(r > 0) { const a = Math.min(r, 5); queue.push({type:'internet', name:'Internet', amount:a}); r -= a; }
               }
+              setStatus('loading'); setLoadingMsg('Generando examen...'); setError(null);
+              try {
+                  const first = queue[0];
+                  let sc = { type: first.type, name: first.name, content: first.type === 'pdf' ? await getFromDB(first.id) : '' };
+                  const iQs = await fetchBatch(apiKey, activeSubject, first.amount, 0, sc);
+                  setQuestions(iQs.map((q, i) => ({ ...q, id: i })));
+                  setBatchQueue(queue.slice(1)); setStatus('active'); setTimeLeft(activeSubject.timeMinutes * 60);
+              } catch (e) { setError(e.message); setStatus('idle'); }
           };
 
           const handleAnswer = (optionIdx) => {
@@ -674,15 +504,9 @@
               setStatus('finished');
               const finalStats = calculateStats();
               onSaveResult({ 
-                  date: new Date().toISOString(), 
-                  subjectId: activeSubject.id, 
-                  subjectName: activeSubject.name, 
-                  score: finalStats.points, 
-                  percentage: finalStats.percentage,
-                  hits: finalStats.hits, 
-                  misses: finalStats.misses, 
-                  skips: finalStats.skips, 
-                  total: questions.length 
+                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
               });
           };
 
@@ -692,173 +516,90 @@
                   const ans = answers[idx];
                   if (ans === undefined || ans === -1) skips++; else if (ans === q.correct) hits++; else misses++;
               });
-              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
+              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss);
               const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
               return { hits, misses, skips, points, maxPoints, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0 };
           };
 
           const stats = useMemo(() => status !== 'idle' ? calculateStats() : {}, [answers, questions]);
 
-          if (status === 'idle') {
-              const filesCount = activeSubject.files ? activeSubject.files.length : 0;
-              return (
-                  <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                      {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
-                          <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
-                              <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
-                              <p className="text-slate-400 mb-8">{activeSubject.type}</p>
-                              
-                              <div className="flex justify-center gap-4 mb-8">
-                                  {filesCount > 0 ? (
-                                     <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2">
-                                         <Icons.FileText size={18}/> {filesCount} PDF(s) vinculados
-                                     </div>
-                                  ) : (
-                                     <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg text-sm text-slate-400 flex items-center gap-2">
-                                         <Icons.Globe size={18}/> Solo Internet
-                                     </div>
-                                  )}
-                              </div>
-                              
-                              {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm flex items-center gap-3 animate-pulse-error"><Icons.AlertTriangle size={24}/><div className="text-left">{error}</div></div>}
-                              <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg flex justify-center gap-3"><Icons.Play size={24}/> COMENZAR</button>
-                          </div>
-                      )}
-                  </div>
-              );
-          }
+          if (status === 'idle') return (
+              <div className="h-full flex items-center justify-center p-6 text-center">
+                  {activeSubject && <div className="max-w-lg w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl">
+                      <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
+                      {error && <div className="bg-red-900/20 text-red-200 p-4 rounded mb-4 text-xs">{error}</div>}
+                      <button onClick={startExam} className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex justify-center gap-3"><Icons.Play/> COMENZAR</button>
+                  </div>}
+              </div>
+          );
 
-          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
+          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-white animate-pulse">{loadingMsg}</h3></div>;
 
           const currentQ = questions[currentIndex];
-          const currentAns = answers[currentIndex];
-          const isAnswered = currentAns !== undefined;
-          const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
-          const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
-          const cutoffPoints = (stats.maxPoints * activeSubject.cutOffPct) / 100;
-          const progressPct = (stats.points / stats.maxPoints) * 100;
-          
-          const globalHitRate = (stats.hits + stats.misses + stats.skips) > 0 
-              ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) 
-              : "0.0";
-          
-          const totalExamSeconds = activeSubject.timeMinutes * 60;
-          const avgTimePerQuestion = totalExamSeconds / activeSubject.qCount;
-          const idealTimeSpent = currentIndex * avgTimePerQuestion;
-          const actualTimeSpent = totalExamSeconds - timeLeft;
-          const paceSeconds = idealTimeSpent - actualTimeSpent;
-          const isFast = paceSeconds >= 0;
-          const absPaceVal = Math.abs(Math.round(paceSeconds));
-          const paceM = Math.floor(absPaceVal / 60);
-          const paceS = absPaceVal % 60;
-          const paceString = `${isFast ? '+' : '-'}${paceM.toString().padStart(2,'0')}:${paceS.toString().padStart(2,'0')}`;
-          
           return (
-              <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
-                  {/* HEADER */}
-                  <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
-                      <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-3">
-                              <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
-                              <div className={`text-xs font-bold ${isFast ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
-                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-[10px] text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
-                          </div>
-                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
+              <div className="flex flex-col h-full bg-[#0a0a0a]">
+                  <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-3">
+                      <div className="flex justify-between items-center">
+                          <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded">{formatTime(timeLeft)}</div>
+                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 text-red-200 rounded text-xs font-bold">Terminar</button></div>
                       </div>
-                      <div className="grid grid-cols-6 gap-2 mb-2 items-center">
-                          <div className="col-span-4 grid grid-cols-4 gap-2">
-                              <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits} <span className="opacity-70">({hitPct}%)</span></div></div>
-                              <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
-                              <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
-                              <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{cutoffPoints.toFixed(0)}</div></div>
-                          </div>
-                          <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-[0_0_10px_rgba(234,179,8,0.1)] h-full">
-                              <div className="text-[9px] text-yellow-500/80 uppercase font-bold tracking-widest leading-none mb-1">Puntos</div>
-                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none drop-shadow-md">{stats.points.toFixed(1)}</div>
-                              <div className="text-[9px] text-yellow-200/60 font-bold mt-0.5 tracking-wide">Tasa: {globalHitRate}%</div>
-                          </div>
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div className="bg-green-900/20 rounded p-1 text-center text-[10px] font-bold text-green-400">A: {stats.hits}</div>
+                          <div className="bg-red-900/20 rounded p-1 text-center text-[10px] font-bold text-red-400">F: {stats.misses}</div>
+                          <div className="bg-yellow-900/20 rounded p-1 text-center text-[10px] font-bold text-yellow-400">P: {stats.points.toFixed(1)}</div>
                       </div>
-                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${Math.max(0, progressPct)}%`}}></div></div>
                   </div>
-
-                  {/* CONTENT */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar relative min-h-0 bg-[#0a0a0a]">
-                      <div className="max-w-4xl mx-auto w-full p-4 md:p-6 pb-4">
-                          <div className="mb-4">
-                              <div className="flex items-center gap-2 mb-2">
-                                  <div className="inline-block bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider border border-slate-700">{currentQ && currentQ.topic ? currentQ.topic : "Tema General"}</div>
-                                  {currentQ && currentQ.origin && (
-                                      <div className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider border ${currentQ.origin.includes('Internet') ? 'bg-indigo-900/40 text-indigo-300 border-indigo-700' : 'bg-orange-900/40 text-orange-300 border-orange-700'}`}>{currentQ.origin}</div>
-                                  )}
-                              </div>
-                              <h2 className="text-lg md:text-xl font-bold text-white leading-snug">{currentQ ? currentQ.question : "Cargando..."}</h2>
-                          </div>
-                          {currentQ && <div className="grid grid-cols-1 gap-2 md:gap-3">
-                              {currentQ.options.slice(0, activeSubject.optionsCount || 4).map((opt, idx) => {
-                                  let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
-                                  if (isAnswered) {
-                                      if (idx === currentQ.correct) btnClass = "bg-green-900/40 border-green-500 text-green-200";
-                                      else if (currentAns === idx) btnClass = "bg-red-900/40 border-red-500 text-red-200";
-                                      else btnClass = "bg-slate-800/50 border-slate-700 text-slate-500 opacity-50";
+                  <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                      {currentQ && <div className="max-w-4xl mx-auto">
+                          <div className="mb-4 text-xs font-bold text-blue-400 uppercase tracking-widest">{currentQ.topic || 'General'} | {currentQ.origin}</div>
+                          <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{currentQ.question}</h2>
+                          <div className="grid grid-cols-1 gap-3">
+                              {currentQ.options.slice(0, activeSubject.optionsCount).map((opt, idx) => {
+                                  const isAns = answers[currentIndex] === idx;
+                                  const showCorrect = answers[currentIndex] !== undefined;
+                                  let cls = "bg-slate-800 border-slate-700 text-slate-300";
+                                  if (showCorrect) {
+                                      if (idx === currentQ.correct) cls = "bg-green-900/40 border-green-500 text-green-200";
+                                      else if (isAns) cls = "bg-red-900/40 border-red-500 text-red-200";
+                                      else cls = "opacity-50";
                                   }
-                                  return <button key={idx} disabled={isAnswered || status === 'finished'} onClick={() => handleAnswer(idx)} className={`text-left p-3 md:p-4 rounded-xl border-2 transition-all font-medium text-sm md:text-base flex items-start gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold mt-0.5">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
+                                  return <button key={idx} disabled={showCorrect} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 font-medium flex gap-3 ${cls}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
                               })}
-                          </div>}
-                          {isAnswered && currentQ && (currentAns !== currentQ.correct) && (
-                              <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 shadow-xl mb-4"><h4 className="text-red-400 font-bold uppercase text-xs mb-2">Explicación</h4><p className="text-slate-300 text-sm leading-relaxed">{currentQ.explanation}</p></div>
+                          </div>
+                          {answers[currentIndex] !== undefined && currentAns !== currentQ.correct && (
+                             <div className="mt-4 p-4 bg-slate-900 border-l-4 border-red-500 text-slate-300 text-sm">{currentQ.explanation}</div>
                           )}
-                      </div>
+                      </div>}
                   </div>
-
-                  {/* FOOTER */}
-                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 z-30 flex justify-between items-center shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                       <div className="flex gap-2 items-center">
-                           <button disabled={isAnswered || status === 'finished'} onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg font-bold text-xs border border-slate-700 uppercase transition-colors">Omitir</button>
-                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 h-full hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => setAutoNext(e.target.checked)} className="accent-blue-500 w-4 h-4" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
-                       </div>
+                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center">
+                       <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold">OMITIR</button>
                        <div className="flex gap-2">
-                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white font-bold shadow-lg transition-colors"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-bold shadow-lg transition-colors"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 rounded-lg text-white"><Icons.ArrowLeft/></button>
+                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 rounded-lg text-white"><Icons.ArrowRight/></button>
                        </div>
                   </div>
-
-                  {/* OVERLAY MAPA */}
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-h-[80vh] flex flex-col shadow-2xl"><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa de Preguntas</h3><button onClick={() => setShowGrid(false)} className="text-slate-400 hover:text-white"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2 p-1">
-                      {Array.from({length: activeSubject.qCount}).map((_, i) => {
-                          const ans = answers[i];
-                          let bg = "bg-slate-800 text-slate-500 border-slate-700";
-                          if (i >= questions.length) {
-                              bg = "bg-slate-900/50 text-slate-800 border-slate-800 cursor-not-allowed"; 
-                          } else if (ans !== undefined) {
-                              if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; 
-                              else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; 
-                              else bg = "bg-red-900/60 text-red-400 border-red-500"; 
-                          }
-                          if (i === currentIndex) bg += " ring-2 ring-white z-10 scale-110";
-                          return <button key={i} onClick={() => { if(i < questions.length) { setCurrentIndex(i); setShowGrid(false); }}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg}`}>{i + 1}</button>
-                      })}
-                  </div></div></div>}
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 p-6 rounded-2xl w-full max-h-[80vh] overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2" onClick={e=>e.stopPropagation()}>
+                      {Array.from({length: activeSubject.qCount}).map((_, i) => (
+                          <button key={i} onClick={() => { if(i < questions.length) { setCurrentIndex(i); setShowGrid(false); }}} className={`aspect-square rounded border font-bold text-xs flex items-center justify-center ${i === currentIndex ? 'ring-2 ring-white' : ''} ${answers[i] !== undefined ? (answers[i] === -1 ? 'bg-slate-700' : (questions[i] && answers[i] === questions[i].correct ? 'bg-green-600' : 'bg-red-600')) : 'bg-slate-800 text-slate-600'}`}>{i + 1}</button>
+                      ))}
+                  </div></div>}
               </div>
           );
       };
 
-      const HistoryTab = ({ results, onClear, onDeleteOne }) => {
-          const stats = useMemo(() => {
-              if (results.length === 0) return null;
-              const total = results.length;
-              const avgScore = results.reduce((acc, r) => acc + (r.score || 0), 0) / total;
-              const avgPct = results.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
-              return { total, avgScore, avgPct };
-          }, [results]);
-
-          return (
-              <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
-                  <div className="flex justify-between items-center mb-6 shrink-0"><h3 className="text-2xl font-display font-bold text-white">Historial</h3><button onClick={onClear} className="text-red-400 hover:text-red-300 flex items-center gap-2 text-sm font-bold"><Icons.Trash2 size={16}/> Limpiar Todo</button></div>
-                  {stats && <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 shrink-0"><div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold text-white">{stats.total}</div><div className="text-xs text-slate-400 uppercase">Exámenes</div></div></div><div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-white">{stats.avgScore.toFixed(1)}</div><div className="text-xs text-slate-400 uppercase">Puntuación Media</div></div></div><div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold text-white">{stats.avgPct.toFixed(1)}%</div><div className="text-xs text-slate-400 uppercase">% Acierto Medio</div></div></div></div>}
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex-1 relative"><div className="absolute inset-0 overflow-y-auto"><table className="w-full text-left"><thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">Nota %</th><th className="p-4 text-right">Detalle (A/F/O)</th><th className="p-4 text-right">Acción</th></tr></thead><tbody className="divide-y divide-slate-800 text-slate-300">{results.map((r, i) => (<tr key={i} className="hover:bg-slate-800/30"><td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td><td className="p-4 font-bold text-white">{r.subjectName}</td><td className="p-4 text-center font-bold text-blue-400">{(r.score || 0).toFixed(1)}</td><td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${(r.percentage || 0) >= 50 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>{(r.percentage || 0).toFixed(1)}%</span></td><td className="p-4 text-right text-xs font-mono"><span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span></td><td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50 transition-colors"><Icons.Trash2 size={16}/></button></td></tr>))}</tbody></table></div></div>
+      const HistoryTab = ({ results, onClear, onDeleteOne }) => (
+          <div className="h-full flex flex-col p-6 overflow-hidden">
+              <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Historial</h3><button onClick={onClear} className="text-red-400 text-sm font-bold flex items-center gap-2"><Icons.Trash2 size={16}/> Limpiar</button></div>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-y-auto flex-1">
+                  <table className="w-full text-left">
+                      <thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Ptos</th><th className="p-4 text-right">Acción</th></tr></thead>
+                      <tbody className="divide-y divide-slate-800 text-slate-300">
+                          {results.map((r, i) => (<tr key={i}><td className="p-4 text-xs">{new Date(r.date).toLocaleDateString()}</td><td className="p-4 font-bold text-white truncate max-w-[100px]">{r.subjectName}</td><td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td><td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="text-red-400 p-2"><Icons.Trash2 size={16}/></button></td></tr>))}
+                      </tbody>
+                  </table>
               </div>
-          );
-      };
+          </div>
+      );
 
       const App = () => {
           const [activeTab, setActiveTab] = useState('subjects');
@@ -867,38 +608,28 @@
           const [history, setHistory] = usePersistentState('boardinggate_history', []);
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
           
-          const handleSaveResult = (result) => { setHistory(prev => [result, ...prev]); setActiveTab('history'); };
-          
-          const handleDeleteOneResult = (index) => {
-              if(confirm("¿Estás seguro de querer eliminar este resultado del historial?")) {
-                  const newHistory = history.filter((_, i) => i !== index);
-                  setHistory(newHistory);
-              }
-          };
-
           return (
               <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
-                  <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
-                      <div><h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight"><span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">Simulador Oposiciones AI</p></div>
+                  <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center z-20">
+                      <div><h1 className="text-2xl font-display font-bold"><span className="text-white">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Oposiciones AI</p></div>
                       <nav className="flex bg-slate-800 rounded-lg p-1 gap-1">
-                          <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.BookOpen size={16}/> <span className="hidden md:inline">Materias</span></button>
-                          <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Play size={16}/> <span className="hidden md:inline">Examen</span></button>
-                          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Clock size={16}/> <span className="hidden md:inline">Histórico</span></button>
-                          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
+                          <button onClick={() => setActiveTab('subjects')} className={`p-2 rounded ${activeTab === 'subjects' ? 'bg-blue-600' : 'text-slate-400'}`}><Icons.BookOpen size={18}/></button>
+                          <button onClick={() => setActiveTab('exam')} className={`p-2 rounded ${activeTab === 'exam' ? 'bg-blue-600' : 'text-slate-400'}`}><Icons.Play size={18}/></button>
+                          <button onClick={() => setActiveTab('history')} className={`p-2 rounded ${activeTab === 'history' ? 'bg-blue-600' : 'text-slate-400'}`}><Icons.Clock size={18}/></button>
+                          <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-blue-600' : 'text-slate-400'}`}><Icons.Settings size={18}/></button>
                       </nav>
                   </header>
-                  <main className="flex-1 overflow-hidden relative w-full h-full flex flex-col">
+                  <main className="flex-1 overflow-hidden">
                       {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
-                      {activeTab === 'exam' && <ExamTab activeSubject={activeSubject} onSaveResult={handleSaveResult} />}
-                      {activeTab === 'history' && <HistoryTab results={history} onClear={() => setHistory([])} onDeleteOne={handleDeleteOneResult} />}
+                      {activeTab === 'exam' && <ExamTab activeSubject={activeSubject} onSaveResult={(r) => {setHistory(prev=>[r, ...prev]); setActiveTab('history');}} />}
+                      {activeTab === 'history' && <HistoryTab results={history} onClear={() => setHistory([])} onDeleteOne={(idx) => setHistory(history.filter((_,i)=>i!==idx))} />}
                       {activeTab === 'settings' && <SettingsTab />}
                   </main>
               </div>
           );
       };
 
-      const root = createRoot(document.getElementById('root'));
-      root.render(<App />);
+      createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>

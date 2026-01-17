@@ -22,19 +22,19 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
-      /* Bloqueo total del scroll del navegador para comportarse como App Nativa */
+      /* Bloqueo estricto del scroll del body para comportamiento App */
       html, body { 
           margin: 0; 
           padding: 0; 
           width: 100%; 
-          height: 100dvh; /* Dynamic Viewport Height para móviles */
+          height: 100dvh; /* Altura dinámica para móviles */
           overflow: hidden; 
           background-color: #0a0a0a; 
           font-family: 'Inter', sans-serif; 
           color: #e5e5e5;
       }
       
-      #root { height: 100%; width: 100%; }
+      #root { height: 100%; width: 100%; display: flex; flex-direction: column; }
       
       .font-display { font-family: 'Orbitron', sans-serif; }
       
@@ -120,20 +120,20 @@
       // --- GEMINI API BATCH FETCHING ---
       const fetchBatch = async (apiKey, subject, amount, offset) => {
           const MODEL = "gemini-2.0-flash"; 
-          const optCount = subject.optionsCount || 4; // Leer el nº opciones configurado
+          const optCount = subject.optionsCount || 4; // Usa configuración de materia
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i)); // ["A", "B", "C"...]
 
-          // INSTRUCCIÓN EXPLÍCITA DE NÚMERO DE OPCIONES
+          // PROMPT QUE FUERZA EL NÚMERO DE OPCIONES
           const prompt = `
             Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}).
             Temas: ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}.
             
-            Genera ${amount} preguntas tipo test (dificultad alta).
+            Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta).
             IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}).
             NO repetir preguntas anteriores (Offset: ${offset}).
             
             Responde ÚNICAMENTE con JSON válido:
-            [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Tema"}]
+            [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]
           `;
 
           const safetySettings = [
@@ -323,7 +323,7 @@
           );
       };
 
-      // 3. EXAMEN (LAYOUT FIXED/FLEX OPTIMIZADO)
+      // 3. EXAMEN (LAYOUT OPTIMIZADO + BATCHING CORREGIDO + GRID COLOREADO)
       const ExamTab = ({ activeSubject, onSaveResult }) => {
           const [status, setStatus] = useState('idle');
           const [questions, setQuestions] = useState([]);
@@ -344,6 +344,7 @@
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
+          // LÓGICA BATCHING: Si quedan menos de 5 preguntas, carga 5 más.
           useEffect(() => {
               if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) {
                   if (questions.length - currentIndex < 5) loadMoreQuestions();
@@ -354,7 +355,7 @@
               if (isFetchingRef.current) return;
               isFetchingRef.current = true;
               try {
-                  const newQs = await fetchBatch(apiKey, activeSubject, 5, questions.length);
+                  const newQs = await fetchBatch(apiKey, activeSubject, 5, questions.length); // Pide solo 5
                   if (newQs && newQs.length > 0) setQuestions(prev => [...prev, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
               } catch (e) { console.log("Retrying..."); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
@@ -362,10 +363,10 @@
           const startExam = async () => {
               if (!activeSubject) return alert("Selecciona materia.");
               if (!apiKey) return alert("Falta API Key.");
-              setStatus('loading'); setLoadingMsg('Generando...'); setError(null);
+              setStatus('loading'); setLoadingMsg('Generando primeras 5 preguntas...'); setError(null);
               isFetchingRef.current = true;
               try {
-                  const initialBatch = await fetchBatch(apiKey, activeSubject, 5, 0);
+                  const initialBatch = await fetchBatch(apiKey, activeSubject, 5, 0); // Pide solo 5 iniciales
                   if (!initialBatch || initialBatch.length === 0) throw new Error("Error IA");
                   setQuestions(initialBatch.map((q, i) => ({ ...q, id: i })));
                   setAnswers({}); setCurrentIndex(0); setTimeLeft(activeSubject.timeMinutes * 60); setStatus('active');
@@ -416,9 +417,8 @@
           const currentQ = questions[currentIndex];
           const currentAns = answers[currentIndex];
           const isAnswered = currentAns !== undefined;
-          const totalAnswered = stats.hits + stats.misses + stats.skips;
-          const hitPct = totalAnswered > 0 ? ((stats.hits / totalAnswered) * 100).toFixed(1) : "0.0";
-          const missPct = totalAnswered > 0 ? ((stats.misses / totalAnswered) * 100).toFixed(1) : "0.0";
+          const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
+          const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
           const cutoffPoints = (stats.maxPoints * activeSubject.cutOffPct) / 100;
           const progressPct = (stats.points / stats.maxPoints) * 100;
 
@@ -481,8 +481,22 @@
                        </div>
                   </div>
 
-                  {/* OVERLAY MAPA */}
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-h-[80vh] flex flex-col"><div className="flex justify-between mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 gap-2">{Array.from({length: activeSubject.qCount}).map((_, i) => <button key={i} onClick={() => { if(i < questions.length) { setCurrentIndex(i); setShowGrid(false); }}} className={`p-2 rounded border text-xs ${i === currentIndex ? 'bg-white text-black' : 'bg-slate-800 text-slate-400'}`}>{i + 1}</button>)}</div></div></div>}
+                  {/* OVERLAY MAPA CON COLORES RESTAURADOS */}
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-h-[80vh] flex flex-col shadow-2xl"><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa de Preguntas</h3><button onClick={() => setShowGrid(false)} className="text-slate-400 hover:text-white"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2 p-1">
+                      {Array.from({length: activeSubject.qCount}).map((_, i) => {
+                          const ans = answers[i];
+                          let bg = "bg-slate-800 text-slate-500 border-slate-700";
+                          if (i >= questions.length) {
+                              bg = "bg-slate-900/50 text-slate-800 border-slate-800 cursor-not-allowed"; // No cargada
+                          } else if (ans !== undefined) {
+                              if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; // Omitida
+                              else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; // Acierto
+                              else bg = "bg-red-900/60 text-red-400 border-red-500"; // Fallo
+                          }
+                          if (i === currentIndex) bg += " ring-2 ring-white z-10 scale-110";
+                          return <button key={i} onClick={() => { if(i < questions.length) { setCurrentIndex(i); setShowGrid(false); }}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg}`}>{i + 1}</button>
+                      })}
+                  </div></div></div>}
               </div>
           );
       };

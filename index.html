@@ -22,7 +22,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
-      body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; color: #e5e5e5; overflow: hidden; height: 100vh; }
+      /* Usamos 100dvh para móviles para evitar que la barra de direcciones tape el footer */
+      body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; color: #e5e5e5; overflow: hidden; height: 100dvh; margin: 0; padding: 0; }
       .font-display { font-family: 'Orbitron', sans-serif; }
       
       /* Scrollbar personalizada */
@@ -598,8 +599,8 @@
                       </div>
                   </div>
 
-                  {/* ZONA DE PREGUNTA (SCROLLABLE) */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                  {/* ZONA DE PREGUNTA (SCROLLABLE, min-h-0 es clave para flex-1 anidado) */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar relative min-h-0">
                       <div className="flex flex-col md:flex-row min-h-full">
                           <div className="flex-1 p-4 md:p-6 pb-20"> {/* Padding bottom extra */}
                               <div className="max-w-4xl mx-auto w-full">

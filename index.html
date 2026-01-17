@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -105,26 +106,31 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      // --- GEMINI API BATCH FETCHING (VERSIÓN ROBUSTA V2) ---
+      // --- GEMINI API BATCH FETCHING (VERSIÓN ROBUSTA V3 - BÚSQUEDA JSON PROFUNDA) ---
       const fetchBatch = async (apiKey, subject, amount, offset) => {
           const MODEL = "gemini-pro"; 
           
           const prompt = `
-            Actúa como tribunal de oposición experto en: "${subject.type}".
-            Materia: "${subject.name}".
+            Actúa como tribunal experto en: "${subject.name}" (${subject.type}).
             Temas: ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}.
             
             Genera ${amount} preguntas tipo test (dificultad alta).
-            Offset: ${offset} (No repetir).
+            NO repetir preguntas anteriores (Offset: ${offset}).
             
-            IMPORTANTE: Responde ÚNICAMENTE con un JSON válido que sea un array de objetos. 
-            NO escribas "Aquí están las preguntas" ni nada similar. SOLO el JSON.
+            Formato OBLIGATORIO (JSON Array):
+            [
+              {
+                "question": "Enunciado...",
+                "options": ["A", "B", "C", "D"],
+                "correct": 0,
+                "explanation": "..."
+              }
+            ]
             
-            Estructura:
-            [{"question": "...", "options": ["A", "B", "C", "D"], "correct": 0, "explanation": "..."}]
+            IMPORTANTE: Devuelve SOLO el JSON. Nada de texto introductorio.
           `;
 
-          // AJUSTES DE SEGURIDAD PARA EVITAR BLOQUEOS
+          // AJUSTES DE SEGURIDAD (Desactivar bloqueos por temas "sensibles" de leyes)
           const safetySettings = [
               { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -155,21 +161,24 @@
                   return [];
               }
 
-              let text = data.candidates[0].content.parts[0].text || "[]";
+              let text = data.candidates[0].content.parts[0].text || "";
               
-              // LIMPIEZA QUIRÚRGICA DEL JSON
+              // --- ESTRATEGIA DE EXTRACCIÓN DE JSON PROFUNDA ---
+              // 1. Quitar bloques de código markdown
               text = text.replace(/```json/g, '').replace(/```/g, '');
-              const startInfo = text.indexOf('[');
-              const endInfo = text.lastIndexOf(']');
               
-              if(startInfo !== -1 && endInfo !== -1) {
-                  text = text.substring(startInfo, endInfo + 1);
+              // 2. Buscar el primer '[' y el último ']'
+              const firstBracket = text.indexOf('[');
+              const lastBracket = text.lastIndexOf(']');
+              
+              if (firstBracket !== -1 && lastBracket !== -1) {
+                  text = text.substring(firstBracket, lastBracket + 1);
+                  return JSON.parse(text); // Intentar parsear lo encontrado
               } else {
-                  console.warn("Formato JSON no reconocido:", text.substring(0, 50));
+                  console.warn("No se encontró un array JSON en la respuesta:", text.substring(0, 100) + "...");
                   return [];
               }
 
-              return JSON.parse(text);
           } catch (e) {
               console.warn("Fallo en lote (recuperable):", e);
               return []; 
@@ -178,7 +187,7 @@
 
       // --- COMPONENTES ---
 
-      // 1. CONFIGURACIÓN (RESTAURADA COMPLETA)
+      // 1. CONFIGURACIÓN (COMPLETA)
       const SettingsTab = () => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [showKey, setShowKey] = useState(false);
@@ -303,7 +312,10 @@
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
                                       <input type="text" placeholder="Ej: Constitución Española" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} />
-                                      <input type="number" placeholder="%" className="w-20 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} />
+                                      <div className="relative w-20">
+                                          <input type="number" placeholder="%" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} />
+                                          <span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span>
+                                      </div>
                                       <button onClick={() => {
                                           const newT = editForm.topics.filter((_, i) => i !== idx);
                                           setEditForm({...editForm, topics: newT});
@@ -347,7 +359,7 @@
           );
       };
 
-      // 3. EXAMEN (CORE CON STREAMING / BATCHING)
+      // 3. EXAMEN (CORE)
       const ExamTab = ({ activeSubject, onSaveResult }) => {
           const [status, setStatus] = useState('idle');
           const [questions, setQuestions] = useState([]);
@@ -408,7 +420,7 @@
               isFetchingRef.current = true;
               try {
                   const initialBatch = await fetchBatch(apiKey, activeSubject, 5, 0);
-                  if (!initialBatch || initialBatch.length === 0) throw new Error("La IA no respondió. Revisa la clave.");
+                  if (!initialBatch || initialBatch.length === 0) throw new Error("La IA no respondió o envió texto basura. Reintenta.");
                   
                   const cleanQs = initialBatch.map((q, i) => ({ ...q, id: i }));
                   setQuestions(cleanQs);

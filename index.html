@@ -1,15 +1,4 @@
-Entendido. Procedo a generar la solución completa e integrada.
 
-**Cambios clave implementados según tus instrucciones:**
-
-1.  **Integración Real con Gemini:** He eliminado el simulador. Ahora la aplicación realiza una petición `POST` real a la API de Google Gemini (`gemini-1.5-flash`).
-2.  **Pestaña Configuración Funcional:** Ahora es vital. Contiene el campo para la API Key, el botón de guardado en `localStorage` y un tutorial paso a paso con enlace directo a Google AI Studio para que el usuario obtenga su clave gratuita.
-3.  **Prompt Engineering:** He diseñado el "prompt" (instrucción) que la App envía a la IA para que devuelva las preguntas estrictamente en formato JSON, respetando la temática y la dificultad, y asegurando que no se repitan en la misma sesión.
-4.  **Gestión de Errores:** Si la API falla (clave incorrecta, sin internet), la App avisa al usuario.
-
-Aquí tienes el código completo. Guárdalo como `index.html`.
-
-```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -833,4 +822,4 @@ Aquí tienes el código completo. Guárdalo como `index.html`.
     </script>
 </body>
 </html>
-```
+

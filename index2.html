@@ -577,6 +577,7 @@
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+          const [showFinishConfirm, setShowFinishConfirm] = useState(false);
           
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
 
@@ -592,7 +593,7 @@
                       }
                   }, 1000);
               } else if (timeLeft === 0 && status === 'active') {
-                  finishExam();
+                  executeFinish();
               }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
@@ -685,20 +686,19 @@
               if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
               
               if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
-                  setTimeout(() => finishExam(), 500);
+                  setTimeout(() => setShowFinishConfirm(true), 500);
               }
           };
 
-          const finishExam = () => {
-              if (confirm("¿Has terminado el examen? ¿Deseas guardar el resultado en el historial?")) {
-                  const finalStats = calculateStats();
-                  onSaveResult({ 
-                      date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                      score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
-                      misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
-                  });
-                  updateState({ status: 'finished' });
-              }
+          const executeFinish = () => {
+              setShowFinishConfirm(false);
+              const finalStats = calculateStats();
+              onSaveResult({ 
+                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
+              });
+              updateState({ status: 'finished' });
           };
 
           const executeRestart = () => {
@@ -773,7 +773,7 @@
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
                               <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
-                              <button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
+                              <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
                           </div>
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center">
@@ -847,6 +847,15 @@
                       type="danger"
                       onClose={() => setShowRestartConfirm(false)}
                       onConfirm={executeRestart}
+                  />
+
+                  <Modal
+                      isOpen={showFinishConfirm}
+                      title="¿TERMINAR EXAMEN?"
+                      message="¿Estás seguro de que deseas finalizar? Se guardará el resultado actual en el historial."
+                      type="default"
+                      onClose={() => setShowFinishConfirm(false)}
+                      onConfirm={executeFinish}
                   />
 
                   {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">

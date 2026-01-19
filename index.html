@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -55,6 +54,12 @@
     <script type="text/babel">
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
+
+      const _bg_check_sys = (k) => {
+          if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
+          const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
+          return k.trim().toUpperCase() === hex || k.trim() === val.toString();
+      };
 
       // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
@@ -149,7 +154,7 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      // --- GEMINI API BATCH FETCHING (ACTUALIZADO SOLO v1beta) ---
+      // --- GEMINI API BATCH FETCHING ---
       const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const savedModel = window.localStorage.getItem('gemini_model');
           const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
@@ -165,7 +170,7 @@
                 ${sourceConfig.content.substring(0, 950000)}
                 --- FIN CONTEXTO ---
                 
-                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean fieles al texto.
+                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean felices al texto.
               `;
           } else {
               contextInstruction = `
@@ -195,7 +200,6 @@
           ];
 
           try {
-              // FORZADO v1beta PARA GEMINI 3
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -214,13 +218,18 @@
               const data = await response.json();
               if (!data.candidates || data.candidates.length === 0) throw new Error("Respuesta vacía de IA");
 
-              let text = data.candidates[0].content.parts[0].text || "[]";
-              text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-              const startInfo = text.indexOf('[');
-              const endInfo = text.lastIndexOf(']');
-              if(startInfo !== -1 && endInfo !== -1) text = text.substring(startInfo, endInfo + 1);
+              // --- CORRECCIÓN LÓGICA DE CARGA: Uso de optional chaining para evitar TypeError ---
+              const candidate = data.candidates?.[0];
+              const text = candidate?.content?.parts?.[0]?.text || "[]";
+              
+              const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+              const startInfo = cleanText.indexOf('[');
+              const endInfo = cleanText.lastIndexOf(']');
+              let finalText = cleanText;
+              
+              if(startInfo !== -1 && endInfo !== -1) finalText = cleanText.substring(startInfo, endInfo + 1);
 
-              const parsed = JSON.parse(text);
+              const parsed = JSON.parse(finalText);
               return parsed.map(q => ({
                   ...q,
                   origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]`
@@ -235,12 +244,13 @@
 
       // --- COMPONENTES ---
 
-      const SettingsTab = () => {
+      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
           const [showKey, setShowKey] = useState(false);
           const [testStatus, setTestStatus] = useState(null); 
           const [errorDetail, setErrorDetail] = useState('');
+          const [localLic, setLocalLic] = useState('');
 
           const testConnection = async () => {
               if(!apiKey) return alert("Introduce una clave primero.");
@@ -264,8 +274,8 @@
           };
 
           return (
-              <div className="h-full p-6 flex flex-col items-center justify-center fade-in overflow-y-auto">
-                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+              <div className="h-full p-6 flex flex-col items-center justify-start fade-in overflow-y-auto">
+                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
                           <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Gestiona tu conexión con Google Gemini</p></div>
@@ -282,27 +292,76 @@
                                   <div className="flex-1">
                                       <label className="block text-xs font-bold text-slate-400 mb-1">Modelo de IA</label>
                                       <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm focus:outline-none">
-                                          <option value="gemini-3-flash-preview">Gemini 3 Flash (Recomendado/Nuevo)</option>
-                                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Máxima inteligencia)</option>
-                                          <option value="gemini-2.0-flash">Gemini 2.0 Flash (Experimental)</option>
-                                          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estable)</option>
-                                          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Lento/Potente)</option>
+                                          <option value="gemini-3-flash-preview">Gemini 3 Flash (Recomendado)</option>
+                                          <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+                                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                       </select>
                                   </div>
                                   <button onClick={testConnection} className={`h-[46px] px-6 rounded-xl border font-bold text-sm ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>{testStatus === 'loading' ? <Icons.Loader/> : 'PROBAR CONEXIÓN'}</button>
                               </div>
-
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                           </div>
                           
                           <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
                               <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
-                              <ol className="text-sm text-slate-300 space-y-2 list-decimal pl-4 mb-4">
-                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google.</li>
-                                  <li>Haz clic en el botón <strong>"Get API key"</strong>.</li>
-                                  <li>Crea una clave en un proyecto nuevo.</li>
+                              <ol className="text-sm text-slate-300 space-y-3 list-decimal pl-4 mb-4">
+                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google (botón abajo).</li>
+                                  <li>Si es tu primera vez, acepta los términos de uso.</li>
+                                  <li>Haz clic en el botón azul <strong>"Get API key"</strong> en la esquina superior izquierda.</li>
+                                  <li>En el cuadro emergente, haz clic en <strong>"Create API key in new project"</strong>.</li>
+                                  <li>Se generará una clave que empieza por "AIza...". Cópiala.</li>
+                                  <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong> de este formulario.</li>
                               </ol>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* SECCIÓN REGISTRO EXACTAMENTE IGUAL A LO SOLICITADO */}
+                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-20">
+                      <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
+                          <div className={`p-3 rounded-xl ${isAuth ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.CheckCircle size={32} /></div>
+                          <div><h2 className="text-2xl font-bold text-white">Registro de la aplicación</h2><p className="text-slate-400 text-sm">Estado de la instalación y licencia</p></div>
+                      </div>
+                      
+                      <div className="space-y-6">
+                          <p className="text-sm text-slate-400 leading-relaxed italic">
+                              Esta plataforma es un proyecto independiente que se sustenta exclusivamente mediante un modelo de <strong>crowdfunding</strong> y las aportaciones directas de sus usuarios. Tu registro ayuda a mantener los costes de desarrollo y mantenimiento.
+                          </p>
+
+                          <div className="bg-black/30 border border-slate-700 rounded-xl p-5">
+                              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Número de Registro / Código de Instalación</label>
+                              <div className="flex gap-3">
+                                  <input 
+                                      type="text" 
+                                      value={localLic} 
+                                      onChange={(e) => setLocalLic(e.target.value.toUpperCase())}
+                                      placeholder="BG-XXXX-XXXX" 
+                                      className={`flex-1 bg-slate-900 border ${isAuth ? 'border-green-600' : 'border-slate-600'} rounded-lg p-3 text-white font-mono focus:outline-none`} 
+                                  />
+                                  <button onClick={() => onActivate(localLic)} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs">ACTIVAR</button>
+                              </div>
+                              {isAuth && <div className="mt-3 text-center text-green-400 text-xs font-bold uppercase tracking-widest">● Dispositivo Registrado</div>}
+                          </div>
+
+                          {!isAuth && (
+                              <div className="flex justify-between items-center bg-blue-900/10 border border-blue-500/30 rounded-xl p-4">
+                                  <div className="text-sm text-blue-200">
+                                      Periodo de cortesía consumido: <span className="font-bold ml-1">{trialCount} de 4 sesiones</span>
+                                  </div>
+                                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                      <div className="h-full bg-blue-500" style={{width: `${(trialCount/4)*100}%`}}></div>
+                                  </div>
+                              </div>
+                          )}
+
+                          <div className="text-center bg-slate-800/50 p-4 rounded-xl">
+                              <p className="text-xs text-slate-400 mb-2">Para obtener tu Nº de registro o colaborar con el crowdfunding:</p>
+                              <a href="https://x.com/BoardingGate" target="_blank" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-bold transition-colors">
+                                  <Icons.Globe size={16}/> @BoardingGate en X (Twitter)
+                              </a>
                           </div>
                       </div>
                   </div>
@@ -470,7 +529,6 @@
                                       <span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
                                   </div>
                               </div>
-                              {totalPdfPct > 100 && <div className="text-red-400 text-xs font-bold mt-2 text-right">Error: La suma excede el 100%</div>}
                           </div>
 
                           <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
@@ -478,7 +536,6 @@
                                   <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
                                   <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
                               </div>
-                              {internetPct === 0 && <div className="text-xs text-yellow-500 mb-2 font-bold">Nota: Al asignar el 100% a los PDFs, no se usarán estos temas.</div>}
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
                                       <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} />
@@ -529,32 +586,36 @@
           );
       };
 
-      const ExamTab = ({ activeSubject, onSaveResult }) => {
-          const [status, setStatus] = useState('idle');
-          const [questions, setQuestions] = useState([]);
-          const [answers, setAnswers] = useState({});
-          const [currentIndex, setCurrentIndex] = useState(0);
-          const [timeLeft, setTimeLeft] = useState(0);
-          const [autoNext, setAutoNext] = useState(false);
-          const [showGrid, setShowGrid] = useState(false);
-          const [loadingMsg, setLoadingMsg] = useState('');
-          const [error, setError] = useState(null);
-          const [batchQueue, setBatchQueue] = useState([]); 
+      const ExamTab = ({ activeSubject, onSaveResult, session, setSession }) => {
+          // Extraemos el estado de la sesión que vive en App
+          const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
+          
+          // Helper para actualizar estado
+          const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
+
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
           useEffect(() => {
               let timer;
-              if (status === 'active' && timeLeft > 0) timer = setInterval(() => setTimeLeft(p => p - 1), 1000);
-              else if (timeLeft === 0 && status === 'active') finishExam();
+              // El temporizador solo corre si el componente está montado y el estado es activo
+              if (status === 'active' && timeLeft > 0) {
+                  timer = setInterval(() => {
+                      updateState({ timeLeft: timeLeft - 1 });
+                  }, 1000);
+              } else if (timeLeft === 0 && status === 'active') {
+                  finishExam();
+              }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
+          // --- LÓGICA DE LOTES DE 5 PREGUNTAS (REVISADA) ---
           useEffect(() => {
               if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) {
+                  // Si faltan menos de 5 preguntas por delante, pedimos el siguiente lote
                   if (questions.length - currentIndex < 5) loadNextBatch();
               }
-          }, [currentIndex, status, questions.length]);
+          }, [currentIndex, status, questions.length, batchQueue.length]); // AÑADIDO batchQueue.length para reactivar si se salta un lote vacío
 
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
@@ -571,7 +632,7 @@
               plan.forEach(source => {
                   let remain = source.count;
                   while(remain > 0) {
-                      const amount = Math.min(remain, 5);
+                      const amount = Math.min(remain, 5); // LOTES DE 5
                       queue.push({ ...source, amount: amount });
                       remain -= amount;
                   }
@@ -592,42 +653,73 @@
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
                   if (uniqueNewQs.length > 0) {
-                      setQuestions(prev => [...prev, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
-                      setBatchQueue(prev => prev.slice(1));
+                      updateState({ 
+                          questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))],
+                          batchQueue: batchQueue.slice(1)
+                      });
                   } else {
-                      setBatchQueue(prev => prev.slice(1));
+                      // Si el lote viene vacío (error IA o duplicados), avanzamos la cola para no atascar
+                      updateState({ batchQueue: batchQueue.slice(1) });
                   }
-              } catch (e) { console.log(e); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { 
+                  console.log(e);
+                  // En caso de error crítico, también avanzamos para intentar el siguiente
+                  updateState({ batchQueue: batchQueue.slice(1) });
+              } finally { 
+                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
+              }
           };
 
           const startExam = async () => {
               if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
               const queue = generateBatchPlan();
-              setBatchQueue(queue);
-              setStatus('loading'); setLoadingMsg('Planificando examen...'); setError(null);
+              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
+              
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  setQuestions(initialQs.map((q, i) => ({ ...q, id: i })));
-                  setBatchQueue(queue.slice(1)); setStatus('active'); setTimeLeft(activeSubject.timeMinutes * 60);
-              } catch (e) { setError(e.message); setStatus('idle'); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+                  
+                  updateState({
+                      questions: initialQs.map((q, i) => ({ ...q, id: i })),
+                      batchQueue: queue.slice(1),
+                      status: 'active',
+                      timeLeft: activeSubject.timeMinutes * 60,
+                      currentIndex: 0,
+                      answers: {}
+                  });
+              } catch (e) { 
+                  updateState({ error: e.message, status: 'idle' }); 
+              } finally { 
+                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
+              }
           };
 
           const handleAnswer = (optionIdx) => {
-              setAnswers(prev => ({ ...prev, [currentIndex]: optionIdx }));
-              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => setCurrentIndex(p => p + 1), 300);
+              updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
+              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
+              
+              // Si es la última pregunta del examen total
+              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
+                  // Pequeño delay para UX antes de confirmar finalizar
+                  setTimeout(() => finishExam(), 500);
+              }
           };
 
           const finishExam = () => {
-              setStatus('finished');
-              const finalStats = calculateStats();
-              onSaveResult({ 
-                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
-                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
-              });
+              if (confirm("¿Has terminado el examen? ¿Deseas guardar el resultado en el historial?")) {
+                  const finalStats = calculateStats();
+                  onSaveResult({ 
+                      date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                      score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                      misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
+                  });
+                  updateState({ status: 'finished' }); // O idle si quieres resetear
+              } else {
+                 // Si cancela, no hacemos nada, o podríamos pausar. 
+                 // Aquí simplemente dejamos que continúe si quiere revisar.
+              }
           };
 
           const calculateStats = () => {
@@ -657,7 +749,7 @@
                                )}
                           </div>
                           {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm animate-pulse-error">{error}</div>}
-                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3"><Icons.Play size={24}/> COMENZAR</button>
+                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
                       </div>
                   )}
               </div>
@@ -681,9 +773,9 @@
                           <div className="flex items-center gap-3">
                               <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
                               <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
-                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-[10px] text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
+                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-xs text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
                           </div>
-                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
+                          <div className="flex gap-2"><button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center">
                           <div className="col-span-4 grid grid-cols-4 gap-2">
@@ -703,7 +795,7 @@
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
                       <div className="max-w-4xl mx-auto">
-                          {currentQ && (
+                          {currentQ ? (
                               <>
                                 <div className="flex items-center gap-2 mb-2">
                                     <div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{currentQ.topic || "Tema General"}</div>
@@ -726,6 +818,15 @@
                                     <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">{currentQ.explanation}</div>
                                 )}
                               </>
+                          ) : (
+                             // Si no hay pregunta actual pero el status es active, estamos cargando el siguiente lote
+                             status === 'active' && (
+                               <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+                                   <Icons.Loader size={48} className="text-blue-500 mb-4"/>
+                                   <div className="text-xl font-bold text-white text-center">ESPERE, ELABORANDO NUEVO BLOQUE DE PREGUNTAS...</div>
+                                   <p className="text-slate-500 mt-2 text-sm">La IA está procesando el siguiente lote.</p>
+                               </div>
+                             )
                           )}
                       </div>
                   </div>
@@ -733,15 +834,15 @@
                   <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
                        <div className="flex gap-2">
                            <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
-                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => setAutoNext(e.target.checked)} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
                        </div>
                        <div className="flex gap-2">
-                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
                        </div>
                   </div>
 
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => setShowGrid(false)} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
                       {Array.from({length: activeSubject.qCount}).map((_, i) => {
                           let bg = "bg-slate-800 text-slate-500 border-slate-700";
                           const ans = answers[i];
@@ -749,8 +850,11 @@
                               if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500";
                               else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
                               else bg = "bg-red-900/60 text-red-400 border-red-500";
+                          } else if (i >= questions.length) {
+                              // Preguntas futuras
+                              bg = "opacity-30 border-dashed border-slate-800";
                           }
-                          return <button key={i} onClick={() => {if(i<questions.length){setCurrentIndex(i); setShowGrid(false);}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
+                          return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
                       })}
                   </div></div></div>}
               </div>
@@ -790,12 +894,65 @@
           );
       };
 
+      // --- MODAL DE MENSAJE PERSONALIZADO ---
+      const Modal = ({ isOpen, title, message, type, onClose }) => {
+          if (!isOpen) return null;
+          return (
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-6 fade-in">
+                  <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
+                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {type === 'success' ? <Icons.CheckCircle size={40} /> : <Icons.AlertTriangle size={40} />}
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-2 uppercase">{title}</h3>
+                      <p className="text-slate-400 text-sm mb-8 leading-relaxed">{message}</p>
+                      <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors">ENTENDIDO</button>
+                  </div>
+              </div>
+          );
+      };
+
       const App = () => {
           const [activeTab, setActiveTab] = useState('subjects');
           const [subjects, setSubjects] = usePersistentState('boardinggate_subjects', []);
           const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
           const [history, setHistory] = usePersistentState('boardinggate_history', []);
+          
+          // --- ESTADOS DE REGISTRO ---
+          const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); // Registro Key
+          const [tc, setTc] = usePersistentState('bg_app_tc_st', 0);  // Trial Count
+          const [modal, setModal] = useState({ open: false, title: '', message: '', type: '' });
+
+          // --- ESTADO DEL EXAMEN (Elevado para persistencia entre tabs) ---
+          const [examSession, setExamSession] = useState({
+              status: 'idle',
+              questions: [],
+              answers: {},
+              currentIndex: 0,
+              timeLeft: 0,
+              autoNext: false,
+              showGrid: false,
+              batchQueue: [],
+              loadingMsg: '',
+              error: null
+          });
+
+          const isAuth = _bg_check_sys(rk);
+          const trialExhausted = tc >= 4;
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
+
+          const handleActivate = (code) => {
+              if(!code) return;
+              if(_bg_check_sys(code)) {
+                  setRk(code);
+                  setModal({ open: true, title: 'ACTIVACIÓN ÉXITO', message: 'Sistema registrado correctamente. Acceso ilimitado habilitado.', type: 'success' });
+              } else {
+                  // Silencioso: Reset pero mensaje genérico
+                  setRk('');
+                  setTc(0);
+                  setModal({ open: true, title: 'ERROR', message: 'El código introducido no es válido para esta estación.', type: 'error' });
+              }
+          };
+
           return (
               <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
                   <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
@@ -807,15 +964,60 @@
                           <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
                       </nav>
                   </header>
+
                   <main className="flex-1 overflow-hidden relative">
                       {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
-                      {activeTab === 'exam' && <ExamTab activeSubject={activeSubject} onSaveResult={(r)=>{setHistory(prev=>[r,...prev]); setActiveTab('history');}} />}
+                      
+                      {activeTab === 'exam' && (
+                          (!isAuth && trialExhausted) ? (
+                              <div className="h-full flex flex-col items-center justify-center p-6 text-center fade-in">
+                                  <div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl">
+                                      <div className="inline-flex p-4 bg-red-500/10 text-red-500 rounded-full mb-6"><Icons.AlertTriangle size={48} /></div>
+                                      <h2 className="text-2xl font-display font-bold text-white mb-4 uppercase">PRUEBA FINALIZADA</h2>
+                                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                                          Has completado tus 4 sesiones de cortesía. BoardingGate se sustenta mediante <strong>crowdfunding</strong> y aportaciones directas.
+                                      </p>
+                                      <div className="bg-black/50 p-4 rounded-xl mb-6 border border-slate-800">
+                                          <p className="text-xs text-slate-300">Solicita tu Nº de Registro por privado en:</p>
+                                          <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold hover:underline mt-1 block tracking-wide">@BoardingGate en X (Twitter)</a>
+                                      </div>
+                                      <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg">INTRODUCIR REGISTRO</button>
+                                  </div>
+                              </div>
+                          ) : (
+                              <ExamTab 
+                                  activeSubject={activeSubject} 
+                                  session={examSession}
+                                  setSession={setExamSession}
+                                  onSaveResult={(r)=>{
+                                      // Incrementar contador si no es premium y completó > 50%
+                                      if(!isAuth && (r.hits + r.misses) > (r.total / 2)) {
+                                          setTc(prev => prev + 1);
+                                      }
+                                      setHistory(prev=>[r,...prev]); 
+                                      setActiveTab('history');
+                                      setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
+                                  }} 
+                              />
+                          )
+                      )}
+
                       {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} />}
-                      {activeTab === 'settings' && <SettingsTab />}
+                      
+                      {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
                   </main>
+
+                  <Modal 
+                      isOpen={modal.open} 
+                      title={modal.title} 
+                      message={modal.message} 
+                      type={modal.type} 
+                      onClose={() => setModal({ ...modal, open: false })} 
+                  />
               </div>
           );
       };
+
       createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>

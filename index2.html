@@ -10,18 +10,14 @@
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -56,16 +52,11 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // --- LÓGICA DE REGISTRO (OFUSCADA) ---
       const _bg_v_sys = (k) => {
-          if (!k) return false;
-          const d = new Date();
-          const v = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
-          const hex = "BG-" + (v ^ 0x7B).toString(16).toUpperCase(); 
-          return k.trim().toUpperCase() === hex || k.trim() === v.toString();
+                    if (!k) return false; const d = new Date();const v = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate(); const hex = "BG-" + (v ^ 0x7B).toString(16).toUpperCase(); 
+                    return k.trim().toUpperCase() === hex || k.trim() === v.toString();
       };
 
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );

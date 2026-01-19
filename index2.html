@@ -56,11 +56,12 @@
       const { createRoot } = ReactDOM;
 
       const _bg_check_sys = (k) => {
-          if (!k) return false;const d = new Date(); const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
+          if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
           const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
+      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -217,13 +218,18 @@
               const data = await response.json();
               if (!data.candidates || data.candidates.length === 0) throw new Error("Respuesta vacía de IA");
 
-              let text = data.candidates[0].content.parts[0].text || "[]";
-              text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-              const startInfo = text.indexOf('[');
-              const endInfo = text.lastIndexOf(']');
-              if(startInfo !== -1 && endInfo !== -1) text = text.substring(startInfo, endInfo + 1);
+              // --- CORRECCIÓN LÓGICA DE CARGA: Uso de optional chaining para evitar TypeError ---
+              const candidate = data.candidates?.[0];
+              const text = candidate?.content?.parts?.[0]?.text || "[]";
+              
+              const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+              const startInfo = cleanText.indexOf('[');
+              const endInfo = cleanText.lastIndexOf(']');
+              let finalText = cleanText;
+              
+              if(startInfo !== -1 && endInfo !== -1) finalText = cleanText.substring(startInfo, endInfo + 1);
 
-              const parsed = JSON.parse(text);
+              const parsed = JSON.parse(finalText);
               return parsed.map(q => ({
                   ...q,
                   origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]`
@@ -609,7 +615,7 @@
                   // Si faltan menos de 5 preguntas por delante, pedimos el siguiente lote
                   if (questions.length - currentIndex < 5) loadNextBatch();
               }
-          }, [currentIndex, status, questions.length]);
+          }, [currentIndex, status, questions.length, batchQueue.length]); // AÑADIDO batchQueue.length para reactivar si se salta un lote vacío
 
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
@@ -652,9 +658,16 @@
                           batchQueue: batchQueue.slice(1)
                       });
                   } else {
+                      // Si el lote viene vacío (error IA o duplicados), avanzamos la cola para no atascar
                       updateState({ batchQueue: batchQueue.slice(1) });
                   }
-              } catch (e) { console.log(e); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { 
+                  console.log(e);
+                  // En caso de error crítico, también avanzamos para intentar el siguiente
+                  updateState({ batchQueue: batchQueue.slice(1) });
+              } finally { 
+                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
+              }
           };
 
           const startExam = async () => {
@@ -687,7 +700,9 @@
               updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
               if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
               
+              // Si es la última pregunta del examen total
               if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
+                  // Pequeño delay para UX antes de confirmar finalizar
                   setTimeout(() => finishExam(), 500);
               }
           };
@@ -702,6 +717,8 @@
                   });
                   updateState({ status: 'finished' }); // O idle si quieres resetear
               } else {
+                 // Si cancela, no hacemos nada, o podríamos pausar. 
+                 // Aquí simplemente dejamos que continúe si quiere revisar.
               }
           };
 
@@ -877,6 +894,7 @@
           );
       };
 
+      // --- MODAL DE MENSAJE PERSONALIZADO ---
       const Modal = ({ isOpen, title, message, type, onClose }) => {
           if (!isOpen) return null;
           return (

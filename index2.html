@@ -9,18 +9,14 @@
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -55,8 +51,6 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // --- LÓGICA DE REGISTRO (OFUSCADA) ---
-      // Fórmula: (Año + Mes + Día) * Día
       const _bg_v_sys = (k) => {
           if (!k) return false;
           const d = new Date();
@@ -65,7 +59,6 @@
           return k.trim().toUpperCase() === hex || k.trim() === v.toString();
       };
 
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -174,7 +167,7 @@
                 ${sourceConfig.content.substring(0, 950000)}
                 --- FIN CONTEXTO ---
                 
-                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean felices al texto.
+                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean menos pero que sean fieles al texto.
               `;
           } else {
               contextInstruction = `
@@ -291,7 +284,6 @@
 
           return (
               <div className="h-full p-6 flex flex-col items-center justify-start fade-in overflow-y-auto">
-                  {/* CONFIGURACIÓN IA */}
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
@@ -318,6 +310,7 @@
                                   </div>
                                   <button onClick={testConnection} className={`h-[46px] px-6 rounded-xl border font-bold text-sm ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>{testStatus === 'loading' ? <Icons.Loader/> : 'PROBAR CONEXIÓN'}</button>
                               </div>
+
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                           </div>
                           
@@ -325,8 +318,8 @@
                               <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
                               <ol className="text-sm text-slate-300 space-y-3 list-decimal pl-4 mb-4">
                                   <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google.</li>
-                                  <li>Haz clic en el botón <strong>"Get API key"</strong> para generar una nueva clave de proyecto.</li>
-                                  <li><strong>Copia la clave</strong> generada y pégala en el campo <strong>"Google Gemini API Key"</strong> de arriba.</li>
+                                  <li>Haz clic en el botón <strong>"Get API key"</strong> para generar una nueva clave.</li>
+                                  <li><strong>Copia la API y pégala</strong> en el campo "Google Gemini API Key" de esta aplicación.</li>
                               </ol>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
                           </div>
@@ -365,7 +358,7 @@
                           {!isAuth && (
                               <div className="flex justify-between items-center bg-blue-900/10 border border-blue-500/20 rounded-xl p-4 text-xs">
                                   <span className="text-blue-300 italic">Uso de cortesía: {trialCount} de 4 sesiones consumidas.</span>
-                                  <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold hover:underline flex items-center gap-1"><Icons.ExternalLink size={14}/> @BoardingGate</a>
+                                  <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold hover:underline flex items-center gap-1"><Icons.ExternalLink size={14}/> @BoardingGate en X</a>
                               </div>
                           )}
                       </div>
@@ -389,19 +382,31 @@
               files: [] 
           };
 
-          const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
-          const handleEdit = (sub) => { setEditForm({ ...defaultSubject, ...sub, files: sub.files || [] }); setIsEditing(true); };
+          const handleNew = () => { 
+              setEditForm({ ...defaultSubject, id: Date.now() }); 
+              setIsEditing(true); 
+          };
+          
+          const handleEdit = (sub) => { 
+              const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] };
+              setEditForm(safeSub);
+              setIsEditing(true); 
+          };
+
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               if (totalPdfPct > 100) return alert(`El porcentaje total de los PDFs (${totalPdfPct}%) excede el 100%.`);
+              
               setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
               if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
           };
 
           const handleDelete = async (id, sub) => { 
               if (confirm("¿Borrar materia y todos sus documentos anexos?")) { 
-                  if(sub.files) { for(const f of sub.files) await deleteFromDB(f.id); }
+                  if(sub.files) {
+                      for(const f of sub.files) await deleteFromDB(f.id);
+                  }
                   await deleteFromDB(id); 
                   setSubjects(prev => prev.filter(s => s.id !== id)); 
                   if (activeSubjectId === id) setActiveSubjectId(null); 
@@ -412,33 +417,66 @@
 
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
-              if (!file || file.type !== 'application/pdf') return;
+              if (!file) return;
+              if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
+
               setPdfProcessing(true);
               setPdfProgress(0);
+
               try {
                   const arrayBuffer = await file.arrayBuffer();
                   const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
                   let fullText = "";
+                  
                   for (let i = 1; i <= pdf.numPages; i++) {
                       const page = await pdf.getPage(i);
                       const textContent = await page.getTextContent();
-                      fullText += textContent.items.map(item => item.str).join(' ') + "\n";
+                      const pageText = textContent.items.map(item => item.str).join(' ');
+                      fullText += pageText + "\n";
                       setPdfProgress(Math.round((i / pdf.numPages) * 100));
                   }
+
                   const fileId = `${editForm.id}_${Date.now()}`;
                   await saveToDB(fileId, fullText);
+                  
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal) }] }));
-              } catch (err) { alert("Error al leer el PDF."); } finally { setPdfProcessing(false); }
+                  const remaining = Math.max(0, 100 - currentTotal);
+                  
+                  setEditForm(prev => ({
+                      ...prev,
+                      files: [...prev.files, { id: fileId, name: file.name, pct: remaining }] 
+                  }));
+
+              } catch (err) {
+                  console.error(err);
+                  alert("Error al leer el PDF.");
+              } finally {
+                  setPdfProcessing(false);
+              }
+          };
+
+          const handleDeleteFile = async (idx) => {
+              const file = editForm.files[idx];
+              await deleteFromDB(file.id);
+              const newFiles = editForm.files.filter((_, i) => i !== idx);
+              setEditForm({...editForm, files: newFiles});
+          };
+
+          const handleFilePctChange = (idx, val) => {
+              const newFiles = [...editForm.files];
+              newFiles[idx].pct = parseFloat(val) || 0;
+              setEditForm({...editForm, files: newFiles});
           };
 
           if (isEditing) {
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               const internetPct = Math.max(0, 100 - totalPdfPct);
+
               return (
                   <div className="h-full flex flex-col p-4 overflow-y-auto">
                       <div className="max-w-4xl mx-auto w-full pb-20">
                           <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> {editForm.name ? 'Editar' : 'Nueva'} Materia</h3>
+                          
                           <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Nombre</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
@@ -451,6 +489,7 @@
                                   <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
                               </div>
                           </div>
+
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
                               <div className="flex justify-between items-center mb-4">
                                   <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentación Anexa (PDFs)</h4>
@@ -459,17 +498,63 @@
                                       <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
                                   </label>
                               </div>
+
                               <div className="space-y-2 mb-4">
+                                  {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos. Todo el examen se basará en Internet.</div>}
+                                  
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
                                           <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
-                                          <div className="flex-1 min-w-0 font-bold text-white truncate">{file.name}</div>
-                                          <input type="number" value={file.pct} onChange={e => { const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f}); }} className="w-12 bg-slate-900 border border-slate-600 rounded p-1 text-right text-xs" />
-                                          <button onClick={async () => { await deleteFromDB(file.id); setEditForm({...editForm, files: editForm.files.filter((_,i)=>i!==idx)}); }} className="p-2 text-red-400"><Icons.Trash2 size={16}/></button>
+                                          <div className="flex-1 min-w-0">
+                                              <div className="text-sm font-bold truncate text-white">{file.name}</div>
+                                              <div className="text-[10px] text-slate-400">ID: {file.id.slice(-6)}</div>
+                                          </div>
+                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
+                                              <span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span>
+                                              <input type="number" value={file.pct} onChange={e => handleFilePctChange(idx, e.target.value)} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
+                                              <span className="text-xs font-bold text-slate-500 pr-1">%</span>
+                                          </div>
+                                          <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Icons.Trash2 size={16}/></button>
                                       </div>
                                   ))}
                               </div>
+
+                              <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
+                                  <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
+                                  <div className="flex items-center gap-4 text-xs font-mono">
+                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span>
+                                      <span className="text-slate-600">|</span>
+                                      <span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
+                                  </div>
+                              </div>
                           </div>
+
+                          <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
+                              <div className="flex justify-between items-center mb-4">
+                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
+                                  <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
+                              </div>
+                              {editForm.topics.map((t, idx) => (
+                                  <div key={idx} className="flex gap-2 mb-2 items-center">
+                                      <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} />
+                                      <div className="relative w-24">
+                                          <input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6 font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/>
+                                          <span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span>
+                                      </div>
+                                      <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button>
+                                  </div>
+                              ))}
+                          </div>
+
+                          <div className="glass-panel p-6 rounded-xl">
+                              <h4 className="text-sm font-bold text-slate-400 mb-3 uppercase tracking-wider">Baremo</h4>
+                              <div className="grid grid-cols-3 gap-4">
+                                  <div><label className="text-xs font-bold text-green-400 block mb-1">Acierto</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-green-400 font-bold text-right" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
+                                  <div><label className="text-xs font-bold text-red-400 block mb-1">Fallo</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-red-400 font-bold text-right" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
+                                  <div><label className="text-xs font-bold text-slate-400 block mb-1">Omisión</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
+                              </div>
+                          </div>
+                          
                           <div className="flex gap-4 pt-6 mt-4 border-t border-slate-700">
                               <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
                               <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar</button>
@@ -484,10 +569,9 @@
                   <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Icons.Plus size={20}/> Nueva</button></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
                       {subjects.map(sub => (
-                          <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500' : 'bg-slate-900/50 border-slate-700'}`}>
-                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4>
-                              <p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                              <div className="flex justify-end gap-2"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 text-red-400"><Icons.Trash2 size={18}/></button></div>
+                          <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
+                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
+                              <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
                           </div>
                       ))}
                   </div>
@@ -549,10 +633,12 @@
               isFetchingRef.current = true;
               const nextBatch = batchQueue[0]; 
               try {
-                  let sc = { type: nextBatch.type, name: nextBatch.name, content: nextBatch.type === 'pdf' ? await getFromDB(nextBatch.id) : '' };
-                  const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sc); 
-                  if (newQs.length > 0) {
-                      setQuestions(prev => [...prev, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
+                  let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: nextBatch.type === 'pdf' ? await getFromDB(nextBatch.id) : '' };
+                  const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
+                  const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
+                  const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
+                  if (uniqueNewQs.length > 0) {
+                      setQuestions(prev => [...prev, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
                       setBatchQueue(prev => prev.slice(1));
                   } else {
                       setBatchQueue(prev => prev.slice(1));
@@ -572,7 +658,7 @@
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
                   setQuestions(initialQs.map((q, i) => ({ ...q, id: i })));
                   setBatchQueue(queue.slice(1)); setStatus('active'); setTimeLeft(activeSubject.timeMinutes * 60);
-              } catch (e) { setStatus('idle'); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { setError(e.message); setStatus('idle'); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const handleAnswer = (optionIdx) => {
@@ -581,11 +667,13 @@
           };
 
           const finishExam = () => {
-              const h=0, m=0, s=0;
-              questions.forEach((q,idx)=>{ const a=answers[idx]; if(a===undefined||a===-1) return; if(a===q.correct) return; });
-              const stats = calculateStats();
-              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: stats.points, percentage: stats.percentage, hits: stats.hits, misses: stats.misses, skips: stats.skips, total: questions.length });
               setStatus('finished');
+              const finalStats = calculateStats();
+              onSaveResult({ 
+                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
+              });
           };
 
           const calculateStats = () => {
@@ -615,37 +703,59 @@
           if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
 
           const currentQ = questions[currentIndex];
+          const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
+          const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
+          const totalExamSeconds = activeSubject.timeMinutes * 60;
+          const avgTimePerQuestion = totalExamSeconds / activeSubject.qCount;
+          const actualTimeSpent = totalExamSeconds - timeLeft;
+          const paceSeconds = (currentIndex * avgTimePerQuestion) - actualTimeSpent;
+          const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(Math.abs(paceSeconds)/60).toString().padStart(2,'0')}:${(Math.abs(paceSeconds)%60).toString().padStart(2,'0')}`;
+
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
                   <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
                       <div className="flex justify-between items-center mb-2">
                           <div className="flex items-center gap-3">
                               <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
-                              <div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div>
+                              <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
+                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-[10px] text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
                           </div>
-                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800 transition-colors">Terminar</button></div>
+                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
                       </div>
-                      <div className="grid grid-cols-4 gap-2 mb-2 items-center">
-                          <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits}</div></div>
-                          <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses}</div></div>
-                          <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
-                          <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 text-center"><div className="text-[8px] text-yellow-500 uppercase font-bold leading-none">Puntos</div><div className="text-lg font-display font-bold text-yellow-400 leading-none">{stats.points.toFixed(1)}</div></div>
+                      <div className="grid grid-cols-6 gap-2 mb-2 items-center">
+                          <div className="col-span-4 grid grid-cols-4 gap-2">
+                              <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits} <span className="opacity-70">({hitPct}%)</span></div></div>
+                              <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
+                              <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
+                              <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-1 shadow-[0_0_10px_rgba(234,179,8,0.1)]">
+                                  <div className="text-[8px] text-yellow-500 uppercase font-bold leading-none mb-1">Puntos</div>
+                                  <div className="text-lg font-display font-bold text-yellow-400 leading-none">{stats.points.toFixed(1)}</div>
+                              </div>
+                          </div>
                       </div>
-                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 left-0 h-full bg-blue-500" style={{width: `${(stats.hits / activeSubject.qCount) * 100}%`}}></div></div>
+                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%`}}></div></div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                       <div className="max-w-4xl mx-auto">
                           {currentQ && (
                               <>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{currentQ.topic || "Tema General"}</div>
+                                    <div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-indigo-700">{currentQ.origin}</div>
+                                </div>
                                 <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{currentQ.question}</h2>
                                 <div className="grid grid-cols-1 gap-3">
-                                    {currentQ.options.slice(0, activeSubject.optionsCount).map((opt, idx) => (
-                                        <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${answers[currentIndex] === idx ? 'bg-blue-900/20 border-blue-500 text-blue-200' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
-                                            <div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div>
-                                            <span>{opt}</span>
-                                        </button>
-                                    ))}
+                                    {currentQ.options.slice(0, activeSubject.optionsCount).map((opt, idx) => {
+                                        let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
+                                        const isAns = answers[currentIndex] === idx;
+                                        if (answers[currentIndex] !== undefined) {
+                                            if (idx === currentQ.correct) btnClass = "bg-green-900/40 border-green-500 text-green-200";
+                                            else if (isAns) btnClass = "bg-red-900/40 border-red-500 text-red-200";
+                                            else btnClass = "opacity-50";
+                                        }
+                                        return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
+                                    })}
                                 </div>
                                 {answers[currentIndex] !== undefined && (
                                     <div className="mt-6 bg-slate-900 border-l-4 border-blue-500 p-4 text-slate-300 text-sm leading-relaxed">{currentQ.explanation}</div>
@@ -655,43 +765,76 @@
                       </div>
                   </div>
 
-                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30">
-                       <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700">Omitir</button>
+                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
                        <div className="flex gap-2">
-                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 rounded-lg text-white"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 rounded-lg text-white"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => setAutoNext(e.target.checked)} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                       </div>
+                       <div className="flex gap-2">
+                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
+                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
                        </div>
                   </div>
+
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => setShowGrid(false)} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
+                      {Array.from({length: activeSubject.qCount}).map((_, i) => {
+                          let bg = "bg-slate-800 text-slate-500 border-slate-700";
+                          const ans = answers[i];
+                          if (i < questions.length && ans !== undefined) {
+                              if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500";
+                              else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
+                              else bg = "bg-red-900/60 text-red-400 border-red-500";
+                          }
+                          return <button key={i} onClick={() => {if(i<questions.length){setCurrentIndex(i); setShowGrid(false);}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
+                      })}
+                  </div></div></div>}
               </div>
           );
       };
 
-      const HistoryTab = ({ results, onClear, onDeleteOne }) => (
-          <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
-              <div className="flex justify-between items-center mb-6 shrink-0"><h3 className="text-2xl font-display font-bold text-white">Historial</h3><button onClick={onClear} className="text-red-400 text-sm font-bold flex items-center gap-2"><Icons.Trash2 size={16}/> Limpiar</button></div>
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex-1 relative">
-                  <div className="absolute inset-0 overflow-y-auto">
-                      <table className="w-full text-left">
-                          <thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">A/F/O</th><th className="p-4 text-right">Acción</th></tr></thead>
-                          <tbody className="divide-y divide-slate-800 text-slate-300">
-                              {results.map((r, i) => (<tr key={i} className="hover:bg-slate-800/30"><td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td><td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td><td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td><td className="p-4 text-center text-xs font-mono">{r.hits}/{r.misses}/{r.skips}</td><td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 text-red-400"><Icons.Trash2 size={16}/></button></td></tr>))}
-                          </tbody>
-                      </table>
+      const HistoryTab = ({ results, onClear, onDeleteOne }) => {
+          const stats = useMemo(() => {
+              if (results.length === 0) return null;
+              const total = results.length;
+              const avgScore = results.reduce((acc, r) => acc + (r.score || 0), 0) / total;
+              const avgPct = results.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
+              return { total, avgScore, avgPct };
+          }, [results]);
+
+          return (
+              <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
+                  <div className="flex justify-between items-center mb-6 shrink-0"><h3 className="text-2xl font-display font-bold text-white">Historial</h3><button onClick={onClear} className="text-red-400 hover:text-red-300 flex items-center gap-2 text-sm font-bold"><Icons.Trash2 size={16}/> Limpiar Todo</button></div>
+                  {stats && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 shrink-0">
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold text-white">{stats.total}</div><div className="text-xs text-slate-400 uppercase">Exámenes</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-white">{stats.avgScore.toFixed(1)}</div><div className="text-xs text-slate-400 uppercase">Puntuación Media</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold text-white">{stats.avgPct.toFixed(1)}%</div><div className="text-xs text-slate-400 uppercase">% Acierto Medio</div></div></div>
+                      </div>
+                  )}
+                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex-1 relative">
+                      <div className="absolute inset-0 overflow-y-auto">
+                          <table className="w-full text-left">
+                              <thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">Nota %</th><th className="p-4 text-right">Detalle (A/F/O)</th><th className="p-4 text-right">Acción</th></tr></thead>
+                              <tbody className="divide-y divide-slate-800 text-slate-300">
+                                  {results.map((r, i) => (<tr key={i} className="hover:bg-slate-800/30"><td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td><td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td><td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td><td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td><td className="p-4 text-right text-xs font-mono"><span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span></td><td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50 transition-colors"><Icons.Trash2 size={16}/></button></td></tr>))}
+                              </tbody>
+                          </table>
+                      </div>
                   </div>
               </div>
-          </div>
-      );
+          );
+      };
 
       const App = () => {
           const [activeTab, setActiveTab] = useState('subjects');
           const [subjects, setSubjects] = usePersistentState('boardinggate_subjects', []);
           const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
           const [history, setHistory] = usePersistentState('boardinggate_history', []);
-          
-          // REGISTRO
-          const [rk, setRk] = usePersistentState('bg_rk_v1', ''); 
-          const [tc, setTc] = usePersistentState('bg_tc_v1', 0);  
           const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: '' });
+          
+          // ESTADOS REGISTRO
+          const [rk, setRk] = usePersistentState('bg_rk_v2', ''); 
+          const [tc, setTc] = usePersistentState('bg_tc_v2', 0);  
           
           const isAuth = _bg_v_sys(rk);
           const isLocked = !isAuth && tc >= 4;
@@ -701,10 +844,10 @@
               if(!code) return;
               if(_bg_v_sys(code)) {
                   setRk(code);
-                  setModal({ isOpen: true, title: '¡ACTIVADO!', message: 'Simulador registrado con éxito por @BoardingGate.', type: 'success' });
+                  setModal({ isOpen: true, title: '¡ÉXITO!', message: 'Simulador activado correctamente por @BoardingGate.', type: 'success' });
               } else {
                   setRk(''); setTc(0);
-                  setModal({ isOpen: true, title: 'ERROR', message: 'Código de registro no válido.', type: 'error' });
+                  setModal({ isOpen: true, title: 'ERROR', message: 'El código de registro no es válido.', type: 'error' });
               }
           };
 
@@ -733,8 +876,8 @@
                                           Has completado tus 4 sesiones de cortesía. BoardingGate se sustenta exclusivamente mediante <strong>crowdfunding</strong> y aportaciones de la comunidad.
                                       </p>
                                       <div className="bg-black/50 p-4 rounded-xl mb-6">
-                                          <p className="text-xs text-slate-300 italic mb-2">Solicita tu Nº de Registro a través de <strong>@BoardingGate</strong>:</p>
-                                          <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold hover:underline">Ir a @BoardingGate en X</a>
+                                          <p className="text-xs text-slate-300 italic mb-2">Solicita tu Nº de Registro por mensaje privado en:</p>
+                                          <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold text-lg hover:underline block mt-1">@BoardingGate en X</a>
                                       </div>
                                       <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg">IR A CONFIGURACIÓN</button>
                                   </div>

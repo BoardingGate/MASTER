@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -5,22 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>BoardingGate - Oposiciones Pro</title>
     
-    <!-- HERRAMIENTA DE DEPURACIÓN -->
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -61,7 +57,6 @@
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -91,7 +86,6 @@
         HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>
       };
 
-      // --- DB HELPER ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const openDB = () => {
@@ -133,7 +127,6 @@
            });
       };
 
-      // --- UTILS ---
       const usePersistentState = (key, initialValue) => {
         const [state, setState] = useState(() => {
             try {
@@ -154,7 +147,6 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      // --- GEMINI API BATCH FETCHING ---
       const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const savedModel = window.localStorage.getItem('gemini_model');
           const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
@@ -218,7 +210,6 @@
               const data = await response.json();
               if (!data.candidates || data.candidates.length === 0) throw new Error("Respuesta vacía de IA");
 
-              // --- CORRECCIÓN LÓGICA DE CARGA: Uso de optional chaining para evitar TypeError ---
               const candidate = data.candidates?.[0];
               const text = candidate?.content?.parts?.[0]?.text || "[]";
               
@@ -241,8 +232,6 @@
               return []; 
           }
       };
-
-      // --- COMPONENTES ---
 
       const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
@@ -319,7 +308,6 @@
                       </div>
                   </div>
 
-                  {/* SECCIÓN REGISTRO EXACTAMENTE IGUAL A LO SOLICITADO */}
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-20">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className={`p-3 rounded-xl ${isAuth ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.CheckCircle size={32} /></div>
@@ -587,10 +575,10 @@
       };
 
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession }) => {
-          // Extraemos el estado de la sesión que vive en App
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
+          const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+          const [showFinishConfirm, setShowFinishConfirm] = useState(false);
           
-          // Helper para actualizar estado
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
 
           const [apiKey] = usePersistentState('gemini_api_key', '');
@@ -598,24 +586,23 @@
 
           useEffect(() => {
               let timer;
-              // El temporizador solo corre si el componente está montado y el estado es activo
               if (status === 'active' && timeLeft > 0) {
                   timer = setInterval(() => {
-                      updateState({ timeLeft: timeLeft - 1 });
+                      if (!isFetchingRef.current) {
+                           updateState({ timeLeft: timeLeft - 1 });
+                      }
                   }, 1000);
               } else if (timeLeft === 0 && status === 'active') {
-                  finishExam();
+                  executeFinish();
               }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
-          // --- LÓGICA DE LOTES DE 5 PREGUNTAS (REVISADA) ---
           useEffect(() => {
               if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) {
-                  // Si faltan menos de 5 preguntas por delante, pedimos el siguiente lote
                   if (questions.length - currentIndex < 5) loadNextBatch();
               }
-          }, [currentIndex, status, questions.length, batchQueue.length]); // AÑADIDO batchQueue.length para reactivar si se salta un lote vacío
+          }, [currentIndex, status, questions.length, batchQueue.length]);
 
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
@@ -632,7 +619,7 @@
               plan.forEach(source => {
                   let remain = source.count;
                   while(remain > 0) {
-                      const amount = Math.min(remain, 5); // LOTES DE 5
+                      const amount = Math.min(remain, 5);
                       queue.push({ ...source, amount: amount });
                       remain -= amount;
                   }
@@ -658,12 +645,10 @@
                           batchQueue: batchQueue.slice(1)
                       });
                   } else {
-                      // Si el lote viene vacío (error IA o duplicados), avanzamos la cola para no atascar
                       updateState({ batchQueue: batchQueue.slice(1) });
                   }
               } catch (e) { 
                   console.log(e);
-                  // En caso de error crítico, también avanzamos para intentar el siguiente
                   updateState({ batchQueue: batchQueue.slice(1) });
               } finally { 
                   setTimeout(() => { isFetchingRef.current = false; }, 4000); 
@@ -700,26 +685,36 @@
               updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
               if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
               
-              // Si es la última pregunta del examen total
               if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
-                  // Pequeño delay para UX antes de confirmar finalizar
-                  setTimeout(() => finishExam(), 500);
+                  setTimeout(() => setShowFinishConfirm(true), 500);
               }
           };
 
-          const finishExam = () => {
-              if (confirm("¿Has terminado el examen? ¿Deseas guardar el resultado en el historial?")) {
-                  const finalStats = calculateStats();
-                  onSaveResult({ 
-                      date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                      score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
-                      misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
-                  });
-                  updateState({ status: 'finished' }); // O idle si quieres resetear
-              } else {
-                 // Si cancela, no hacemos nada, o podríamos pausar. 
-                 // Aquí simplemente dejamos que continúe si quiere revisar.
-              }
+          const executeFinish = () => {
+              setShowFinishConfirm(false);
+              const finalStats = calculateStats();
+              onSaveResult({ 
+                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
+              });
+              updateState({ status: 'finished' });
+          };
+
+          const executeRestart = () => {
+              setShowRestartConfirm(false);
+              setSession({
+                  status: 'idle',
+                  questions: [],
+                  answers: {},
+                  currentIndex: 0,
+                  timeLeft: 0,
+                  autoNext: false,
+                  showGrid: false,
+                  batchQueue: [],
+                  loadingMsg: '',
+                  error: null
+              });
           };
 
           const calculateStats = () => {
@@ -775,7 +770,11 @@
                               <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
                               <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-xs text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
                           </div>
-                          <div className="flex gap-2"><button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
+                          <div className="flex gap-2">
+                              <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
+                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
+                              <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
+                          </div>
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center">
                           <div className="col-span-4 grid grid-cols-4 gap-2">
@@ -819,7 +818,6 @@
                                 )}
                               </>
                           ) : (
-                             // Si no hay pregunta actual pero el status es active, estamos cargando el siguiente lote
                              status === 'active' && (
                                <div className="flex flex-col items-center justify-center py-20 animate-pulse">
                                    <Icons.Loader size={48} className="text-blue-500 mb-4"/>
@@ -842,6 +840,24 @@
                        </div>
                   </div>
 
+                  <Modal
+                      isOpen={showRestartConfirm}
+                      title="¿REINICIAR EXAMEN?"
+                      message="Se perderá todo el progreso actual y volverás al inicio. Esta acción no se puede deshacer."
+                      type="danger"
+                      onClose={() => setShowRestartConfirm(false)}
+                      onConfirm={executeRestart}
+                  />
+
+                  <Modal
+                      isOpen={showFinishConfirm}
+                      title="¿TERMINAR EXAMEN?"
+                      message="¿Estás seguro de que deseas finalizar? Se guardará el resultado actual en el historial."
+                      type="default"
+                      onClose={() => setShowFinishConfirm(false)}
+                      onConfirm={executeFinish}
+                  />
+
                   {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
                       {Array.from({length: activeSubject.qCount}).map((_, i) => {
                           let bg = "bg-slate-800 text-slate-500 border-slate-700";
@@ -851,7 +867,6 @@
                               else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
                               else bg = "bg-red-900/60 text-red-400 border-red-500";
                           } else if (i >= questions.length) {
-                              // Preguntas futuras
                               bg = "opacity-30 border-dashed border-slate-800";
                           }
                           return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
@@ -894,18 +909,26 @@
           );
       };
 
-      // --- MODAL DE MENSAJE PERSONALIZADO ---
-      const Modal = ({ isOpen, title, message, type, onClose }) => {
+      const Modal = ({ isOpen, title, message, type, onClose, onConfirm }) => {
           if (!isOpen) return null;
           return (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-6 fade-in">
                   <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
-                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'success' ? 'bg-green-500/20 text-green-400' : type === 'danger' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                           {type === 'success' ? <Icons.CheckCircle size={40} /> : <Icons.AlertTriangle size={40} />}
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2 uppercase">{title}</h3>
                       <p className="text-slate-400 text-sm mb-8 leading-relaxed">{message}</p>
-                      <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors">ENTENDIDO</button>
+                      <div className="flex gap-3">
+                          {onConfirm ? (
+                              <>
+                                  <button onClick={onClose} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors">CANCELAR</button>
+                                  <button onClick={onConfirm} className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors">CONFIRMAR</button>
+                              </>
+                          ) : (
+                              <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors">ENTENDIDO</button>
+                          )}
+                      </div>
                   </div>
               </div>
           );
@@ -917,12 +940,10 @@
           const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
           const [history, setHistory] = usePersistentState('boardinggate_history', []);
           
-          // --- ESTADOS DE REGISTRO ---
-          const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); // Registro Key
-          const [tc, setTc] = usePersistentState('bg_app_tc_st', 0);  // Trial Count
+          const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); 
+          const [tc, setTc] = usePersistentState('bg_app_tc_st', 0); 
           const [modal, setModal] = useState({ open: false, title: '', message: '', type: '' });
 
-          // --- ESTADO DEL EXAMEN (Elevado para persistencia entre tabs) ---
           const [examSession, setExamSession] = useState({
               status: 'idle',
               questions: [],
@@ -946,7 +967,6 @@
                   setRk(code);
                   setModal({ open: true, title: 'ACTIVACIÓN ÉXITO', message: 'Sistema registrado correctamente. Acceso ilimitado habilitado.', type: 'success' });
               } else {
-                  // Silencioso: Reset pero mensaje genérico
                   setRk('');
                   setTc(0);
                   setModal({ open: true, title: 'ERROR', message: 'El código introducido no es válido para esta estación.', type: 'error' });
@@ -990,7 +1010,6 @@
                                   session={examSession}
                                   setSession={setExamSession}
                                   onSaveResult={(r)=>{
-                                      // Incrementar contador si no es premium y completó > 50%
                                       if(!isAuth && (r.hits + r.misses) > (r.total / 2)) {
                                           setTc(prev => prev + 1);
                                       }

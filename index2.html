@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -56,16 +55,12 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // --- LÓGICA DE REGISTRO (OFUSCADA) ---
       const _bg_check_sys = (k) => {
-          if (!k) return false;
-          const d = new Date();
-          const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
+          if (!k) return false;const d = new Date(); const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
           const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -305,9 +300,13 @@
                           
                           <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
                               <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
-                              <ol className="text-sm text-slate-300 space-y-2 list-decimal pl-4 mb-4">
-                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google.</li>
-                                  <li>Haz clic en el botón <strong>"Get API key"</strong>.</li>
+                              <ol className="text-sm text-slate-300 space-y-3 list-decimal pl-4 mb-4">
+                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google (botón abajo).</li>
+                                  <li>Si es tu primera vez, acepta los términos de uso.</li>
+                                  <li>Haz clic en el botón azul <strong>"Get API key"</strong> en la esquina superior izquierda.</li>
+                                  <li>En el cuadro emergente, haz clic en <strong>"Create API key in new project"</strong>.</li>
+                                  <li>Se generará una clave que empieza por "AIza...". Cópiala.</li>
+                                  <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong> de este formulario.</li>
                               </ol>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
                           </div>
@@ -581,24 +580,26 @@
           );
       };
 
-      const ExamTab = ({ activeSubject, onSaveResult }) => {
-          const [status, setStatus] = useState('idle');
-          const [questions, setQuestions] = useState([]); // CORREGIDO: "setQuestions" ya no es read-only
-          const [answers, setAnswers] = useState({});
-          const [currentIndex, setCurrentIndex] = useState(0);
-          const [timeLeft, setTimeLeft] = useState(0);
-          const [autoNext, setAutoNext] = useState(false);
-          const [showGrid, setShowGrid] = useState(false);
-          const [loadingMsg, setLoadingMsg] = useState('');
-          const [error, setError] = useState(null);
-          const [batchQueue, setBatchQueue] = useState([]); 
+      const ExamTab = ({ activeSubject, onSaveResult, session, setSession }) => {
+          // Extraemos el estado de la sesión que vive en App
+          const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
+          
+          // Helper para actualizar estado
+          const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
+
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
           useEffect(() => {
               let timer;
-              if (status === 'active' && timeLeft > 0) timer = setInterval(() => setTimeLeft(p => p - 1), 1000);
-              else if (timeLeft === 0 && status === 'active') finishExam();
+              // El temporizador solo corre si el componente está montado y el estado es activo
+              if (status === 'active' && timeLeft > 0) {
+                  timer = setInterval(() => {
+                      updateState({ timeLeft: timeLeft - 1 });
+                  }, 1000);
+              } else if (timeLeft === 0 && status === 'active') {
+                  finishExam();
+              }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
@@ -646,10 +647,12 @@
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
                   if (uniqueNewQs.length > 0) {
-                      setQuestions(prev => [...prev, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))]);
-                      setBatchQueue(prev => prev.slice(1));
+                      updateState({ 
+                          questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))],
+                          batchQueue: batchQueue.slice(1)
+                      });
                   } else {
-                      setBatchQueue(prev => prev.slice(1));
+                      updateState({ batchQueue: batchQueue.slice(1) });
                   }
               } catch (e) { console.log(e); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
@@ -657,31 +660,49 @@
           const startExam = async () => {
               if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
               const queue = generateBatchPlan();
-              setBatchQueue(queue);
-              setStatus('loading'); setLoadingMsg('Planificando examen...'); setError(null);
+              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
+              
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  setQuestions(initialQs.map((q, i) => ({ ...q, id: i })));
-                  setBatchQueue(queue.slice(1)); setStatus('active'); setTimeLeft(activeSubject.timeMinutes * 60);
-              } catch (e) { setError(e.message); setStatus('idle'); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+                  
+                  updateState({
+                      questions: initialQs.map((q, i) => ({ ...q, id: i })),
+                      batchQueue: queue.slice(1),
+                      status: 'active',
+                      timeLeft: activeSubject.timeMinutes * 60,
+                      currentIndex: 0,
+                      answers: {}
+                  });
+              } catch (e) { 
+                  updateState({ error: e.message, status: 'idle' }); 
+              } finally { 
+                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
+              }
           };
 
           const handleAnswer = (optionIdx) => {
-              setAnswers(prev => ({ ...prev, [currentIndex]: optionIdx }));
-              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => setCurrentIndex(p => p + 1), 300);
+              updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
+              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
+              
+              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
+                  setTimeout(() => finishExam(), 500);
+              }
           };
 
           const finishExam = () => {
-              setStatus('finished');
-              const finalStats = calculateStats();
-              onSaveResult({ 
-                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
-                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
-              });
+              if (confirm("¿Has terminado el examen? ¿Deseas guardar el resultado en el historial?")) {
+                  const finalStats = calculateStats();
+                  onSaveResult({ 
+                      date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
+                      score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
+                      misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
+                  });
+                  updateState({ status: 'finished' }); // O idle si quieres resetear
+              } else {
+              }
           };
 
           const calculateStats = () => {
@@ -735,9 +756,9 @@
                           <div className="flex items-center gap-3">
                               <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
                               <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
-                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-[10px] text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
+                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-xs text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
                           </div>
-                          <div className="flex gap-2"><button onClick={() => setShowGrid(true)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
+                          <div className="flex gap-2"><button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button><button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button></div>
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center">
                           <div className="col-span-4 grid grid-cols-4 gap-2">
@@ -757,7 +778,7 @@
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
                       <div className="max-w-4xl mx-auto">
-                          {currentQ && (
+                          {currentQ ? (
                               <>
                                 <div className="flex items-center gap-2 mb-2">
                                     <div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{currentQ.topic || "Tema General"}</div>
@@ -780,6 +801,15 @@
                                     <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">{currentQ.explanation}</div>
                                 )}
                               </>
+                          ) : (
+                             // Si no hay pregunta actual pero el status es active, estamos cargando el siguiente lote
+                             status === 'active' && (
+                               <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+                                   <Icons.Loader size={48} className="text-blue-500 mb-4"/>
+                                   <div className="text-xl font-bold text-white text-center">ESPERE, ELABORANDO NUEVO BLOQUE DE PREGUNTAS...</div>
+                                   <p className="text-slate-500 mt-2 text-sm">La IA está procesando el siguiente lote.</p>
+                               </div>
+                             )
                           )}
                       </div>
                   </div>
@@ -787,15 +817,15 @@
                   <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
                        <div className="flex gap-2">
                            <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
-                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => setAutoNext(e.target.checked)} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
                        </div>
                        <div className="flex gap-2">
-                           <button onClick={() => setCurrentIndex(p => Math.max(0, p - 1))} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => setCurrentIndex(p => Math.min(questions.length - 1, p + 1))} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
                        </div>
                   </div>
 
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowGrid(false)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => setShowGrid(false)} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
                       {Array.from({length: activeSubject.qCount}).map((_, i) => {
                           let bg = "bg-slate-800 text-slate-500 border-slate-700";
                           const ans = answers[i];
@@ -803,8 +833,11 @@
                               if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500";
                               else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
                               else bg = "bg-red-900/60 text-red-400 border-red-500";
+                          } else if (i >= questions.length) {
+                              // Preguntas futuras
+                              bg = "opacity-30 border-dashed border-slate-800";
                           }
-                          return <button key={i} onClick={() => {if(i<questions.length){setCurrentIndex(i); setShowGrid(false);}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
+                          return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
                       })}
                   </div></div></div>}
               </div>
@@ -844,7 +877,6 @@
           );
       };
 
-      // --- MODAL DE MENSAJE PERSONALIZADO ---
       const Modal = ({ isOpen, title, message, type, onClose }) => {
           if (!isOpen) return null;
           return (
@@ -871,6 +903,20 @@
           const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); // Registro Key
           const [tc, setTc] = usePersistentState('bg_app_tc_st', 0);  // Trial Count
           const [modal, setModal] = useState({ open: false, title: '', message: '', type: '' });
+
+          // --- ESTADO DEL EXAMEN (Elevado para persistencia entre tabs) ---
+          const [examSession, setExamSession] = useState({
+              status: 'idle',
+              questions: [],
+              answers: {},
+              currentIndex: 0,
+              timeLeft: 0,
+              autoNext: false,
+              showGrid: false,
+              batchQueue: [],
+              loadingMsg: '',
+              error: null
+          });
 
           const isAuth = _bg_check_sys(rk);
           const trialExhausted = tc >= 4;
@@ -923,6 +969,8 @@
                           ) : (
                               <ExamTab 
                                   activeSubject={activeSubject} 
+                                  session={examSession}
+                                  setSession={setExamSession}
                                   onSaveResult={(r)=>{
                                       // Incrementar contador si no es premium y completó > 50%
                                       if(!isAuth && (r.hits + r.misses) > (r.total / 2)) {
@@ -930,6 +978,7 @@
                                       }
                                       setHistory(prev=>[r,...prev]); 
                                       setActiveTab('history');
+                                      setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
                                   }} 
                               />
                           )

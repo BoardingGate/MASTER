@@ -576,6 +576,7 @@
 
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
+          const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
 
@@ -697,25 +698,23 @@
                       misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
                   });
                   updateState({ status: 'finished' });
-              } else {
               }
           };
 
-          const handleRestart = () => {
-               if(confirm("¿Estás seguro de que quieres RE-INICIAR el examen? Se perderá el progreso actual y comenzarás de cero.")) {
-                   setSession({
-                      status: 'idle',
-                      questions: [],
-                      answers: {},
-                      currentIndex: 0,
-                      timeLeft: 0,
-                      autoNext: false,
-                      showGrid: false,
-                      batchQueue: [],
-                      loadingMsg: '',
-                      error: null
-                   });
-               }
+          const executeRestart = () => {
+              setShowRestartConfirm(false);
+              setSession({
+                  status: 'idle',
+                  questions: [],
+                  answers: {},
+                  currentIndex: 0,
+                  timeLeft: 0,
+                  autoNext: false,
+                  showGrid: false,
+                  batchQueue: [],
+                  loadingMsg: '',
+                  error: null
+              });
           };
 
           const calculateStats = () => {
@@ -773,7 +772,7 @@
                           </div>
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
-                              <button onClick={handleRestart} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
+                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
                               <button onClick={finishExam} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
                           </div>
                       </div>
@@ -841,6 +840,15 @@
                        </div>
                   </div>
 
+                  <Modal
+                      isOpen={showRestartConfirm}
+                      title="¿REINICIAR EXAMEN?"
+                      message="Se perderá todo el progreso actual y volverás al inicio. Esta acción no se puede deshacer."
+                      type="danger"
+                      onClose={() => setShowRestartConfirm(false)}
+                      onConfirm={executeRestart}
+                  />
+
                   {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
                       {Array.from({length: activeSubject.qCount}).map((_, i) => {
                           let bg = "bg-slate-800 text-slate-500 border-slate-700";
@@ -892,17 +900,26 @@
           );
       };
 
-      const Modal = ({ isOpen, title, message, type, onClose }) => {
+      const Modal = ({ isOpen, title, message, type, onClose, onConfirm }) => {
           if (!isOpen) return null;
           return (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-6 fade-in">
                   <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
-                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'success' ? 'bg-green-500/20 text-green-400' : type === 'danger' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                           {type === 'success' ? <Icons.CheckCircle size={40} /> : <Icons.AlertTriangle size={40} />}
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2 uppercase">{title}</h3>
                       <p className="text-slate-400 text-sm mb-8 leading-relaxed">{message}</p>
-                      <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors">ENTENDIDO</button>
+                      <div className="flex gap-3">
+                          {onConfirm ? (
+                              <>
+                                  <button onClick={onClose} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors">CANCELAR</button>
+                                  <button onClick={onConfirm} className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors">CONFIRMAR</button>
+                              </>
+                          ) : (
+                              <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors">ENTENDIDO</button>
+                          )}
+                      </div>
                   </div>
               </div>
           );

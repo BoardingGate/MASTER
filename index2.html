@@ -360,19 +360,44 @@
               setEditForm({...editForm, files: newFiles});
           };
 
+         
           const handleSearchDescription = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
               if(!editForm.name && !editForm.type) return alert("Escribe algo en nombre o descripción para buscar");
+              
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
-              const prompt = `Actúa como buscador. Lista 5 nombres oficiales de Oposiciones o Másters en España que coincidan con las palabras clave: "${query}". Devuelve ÚNICAMENTE un JSON array de strings válido, ejemplo: ["Oposición X", "Máster Y"].`;
+              
+              // Prompt actualizado para pedir metadatos técnicos
+              const prompt = `Actúa como experto en Oposiciones y Másters de España. Busca hasta 5 coincidencias oficiales para: "${query}". 
+              Para cada una, intenta obtener los datos técnicos del primer ejercicio o test. 
+              Devuelve ÚNICAMENTE un JSON array de objetos con este formato exacto: 
+              [{"label": "Nombre Oficial Oposición/Máster", "q": nº_preguntas_entero, "t": tiempo_minutos_entero, "c": nota_corte_pct_entero, "o": num_opciones_entero}]. 
+              Si desconoces algún dato específico de la prueba, usa OBLIGATORIAMENTE estos valores por defecto para ese campo: q=200, t=270, c=90, o=4.`;
+              
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
-                  if(Array.isArray(list)) setDescResults(list);
-                  else alert("No se encontraron resultados válidos.");
-              } catch(e) { alert("Error al buscar: " + e.message); } finally { setSearchingDesc(false); }
+                  
+                  if(Array.isArray(list) && list.length > 0) {
+                      // Validamos que los objetos tengan estructura mínima para evitar errores
+                      const safeList = list.map(item => ({
+                          label: item.label || "Desconocido",
+                          q: parseInt(item.q) || 200,
+                          t: parseInt(item.t) || 270,
+                          c: parseInt(item.c) || 90,
+                          o: parseInt(item.o) || 4
+                      }));
+                      setDescResults(safeList);
+                  } else {
+                      alert("No se encontraron resultados con el formato esperado.");
+                  }
+              } catch(e) { 
+                  alert("Error al buscar: " + e.message); 
+              } finally { 
+                  setSearchingDesc(false); 
+              }
           };
 
           const handleMagicWand = async () => {
@@ -408,14 +433,34 @@
                                           <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} placeholder="Ej: Auxiliar Administrativo Estado" />
                                           <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
                                       </div>
+
                                       {descResults.length > 0 && (
-                                          <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-40 overflow-y-auto">
-                                              <div className="flex justify-between p-2 bg-slate-900/50"><span className="text-xs text-slate-400">Resultados sugeridos:</span><button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button></div>
-                                              {descResults.map((r,i) => (
-                                                  <button key={i} onClick={()=>{setEditForm({...editForm, type: r}); setDescResults([]);}} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0">{r}</button>
+                                          <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
+                                              <div className="flex justify-between p-2 bg-slate-900/50">
+                                                  <span className="text-xs text-slate-400">Selecciona para autocompletar:</span>
+                                                  <button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button>
+                                              </div>
+                                              {descResults.map((r, i) => (
+                                                  <button key={i} onClick={() => {
+                                                      setEditForm({
+                                                          ...editForm, 
+                                                          type: r.label,
+                                                          qCount: r.q,
+                                                          timeMinutes: r.t,
+                                                          cutOffPct: r.c,
+                                                          optionsCount: r.o
+                                                      }); 
+                                                      setDescResults([]);
+                                                  }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0 group">
+                                                      <div className="font-bold">{r.label}</div>
+                                                      <div className="text-[10px] text-slate-500 group-hover:text-blue-200">
+                                                          {r.q} Preus. | {r.t} Min. | Corte {r.c}% | {r.o} Opc.
+                                                      </div>
+                                                  </button>
                                               ))}
                                           </div>
                                       )}
+
                                   </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

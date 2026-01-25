@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -48,14 +47,15 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // --- SISTEMA DE VALIDACIÓN ---
       const _bg_check_sys = (k) => {
           if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
           const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
-      // --- ICONOS ---
+      const IconBase = ({ children, size = 20, className = "" }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+      );
       const Icons = {
         Clock: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>,
         Grid: (p) => <IconBase {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></IconBase>,
@@ -87,11 +87,6 @@
         Calendar: (p) => <IconBase {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></IconBase>
       };
 
-      const IconBase = ({ children, size = 20, className = "" }) => (
-        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
-      );
-
-      // --- BASE DE DATOS (PDFs) ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const openDB = () => {
@@ -133,7 +128,6 @@
            });
       };
 
-      // --- HOOKS ---
       const usePersistentState = (key, initialValue) => {
         const [state, setState] = useState(() => {
             try {
@@ -147,21 +141,16 @@
         return [state, setState];
       };
 
-      // --- HELPERS IA ---
       const askGemini = async (apiKey, prompt) => {
           const savedModel = window.localStorage.getItem('gemini_model');
           const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-pro-preview";
-          
           const safetySettings = [
               { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
           ];
-
-          // Prompt modificado para forzar búsqueda en internet/conocimiento actualizado
-          const searchEnhancedPrompt = `[INSTRUCCIÓN DE BÚSQUEDA EN TIEMPO REAL ACTIVA]: Utiliza tus capacidades de acceso a información actualizada para responder a lo siguiente con datos de 2025/2026 si están disponibles:\n${prompt}`;
-
+          const searchEnhancedPrompt = `[INSTRUCCIÓN DE BÚSQUEDA EN TIEMPO REAL ACTIVA]: Utiliza internet para responder con datos oficiales y actualizados de 2024/2025:\n${prompt}`;
           try {
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
                   method: 'POST',
@@ -179,12 +168,9 @@
           const startInfo = cleanText.indexOf('[');
           const endInfo = cleanText.lastIndexOf(']');
           if(startInfo !== -1 && endInfo !== -1) return JSON.parse(cleanText.substring(startInfo, endInfo + 1));
-          
-          // Fallback para objetos individuales
           const startObj = cleanText.indexOf('{');
           const endObj = cleanText.lastIndexOf('}');
           if(startObj !== -1 && endObj !== -1) return JSON.parse(cleanText.substring(startObj, endObj + 1));
-          
           return null;
       };
 
@@ -192,29 +178,18 @@
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           let contextInstruction = "";
-          
           if (sourceConfig.type === 'pdf') {
               contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${sourceConfig.content.substring(0, 950000)} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
           } else if (sourceConfig.type === 'official') {
-              contextInstruction = `CONTEXTO: EXAMEN OFICIAL (AÑO/CONVOCATORIA: ${sourceConfig.name}). URL REF: ${sourceConfig.url || 'No disponible'}. INSTRUCCIÓN CRÍTICA: Debes intentar rescatar preguntas REALES que aparecieron en este examen oficial o simulacros muy fieles.`;
+              contextInstruction = `CONTEXTO: EXAMEN OFICIAL (FUENTE: ${sourceConfig.name}). URL: ${sourceConfig.url || 'No disponible'}. INSTRUCCIÓN: Rescata o simula fielmente preguntas reales de ese examen oficial específico.`;
           } else {
-              contextInstruction = `Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa tu conocimiento general actualizado para generar preguntas sobre estos temas.`;
+              contextInstruction = `Temas a tratar (Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa tu conocimiento actualizado de 2025 para generar preguntas de estos temas.`;
           }
-          
-          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
+          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
           const rawText = await askGemini(apiKey, prompt);
           const parsed = extractJSON(rawText);
           return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : sourceConfig.type === 'official' ? `[OFICIAL]` : `[Internet]` }));
       };
-
-      const formatTime = (seconds) => {
-          const h = Math.floor(seconds / 3600);
-          const m = Math.floor((seconds % 3600) / 60);
-          const s = seconds % 60;
-          return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-      };
-
-      // --- COMPONENTES PRINCIPALES ---
 
       const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
@@ -232,7 +207,7 @@
                   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ contents: [{ parts: [{ text: "CONEXIÓN TEST: OK" }] }] })
+                      body: JSON.stringify({ contents: [{ parts: [{ text: "CONEXIÓN TEST" }] }] })
                   });
                   if(response.ok) { setTestStatus('success'); } 
                   else { const err = await response.json(); setTestStatus('error'); setErrorDetail(err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err)); }
@@ -257,7 +232,7 @@
                                   <div className="flex-1">
                                       <label className="block text-xs font-bold text-slate-400 mb-1">Modelo de IA</label>
                                       <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm focus:outline-none">
-                                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Última versión / Conexión Internet)</option>
+                                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Preview/Internet)</option>
                                           <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                                           <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                           <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
@@ -392,7 +367,7 @@
               if(!apiKey) return alert("Configura la API Key primero");
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
-              const prompt = `Busca información ACTUALIZADA de 2025 para: "${query}". Devuelve ÚNICAMENTE un JSON array de objetos con formato: [{"label": "Nombre Oficial", "q": nº_preguntas, "t": minutos, "c": corte_pct, "o": opciones}]. Valores defecto si no encuentras: q=200, t=270, c=90, o=4.`;
+              const prompt = `Actúa como buscador experto. Lista 5 coincidencias oficiales en España para: "${query}". Devuelve JSON: [{"label": "Nombre Oficial", "q": numero, "t": minutos, "c": corte_pct, "o": opciones}]. Default: q=200, t=270, c=90, o=4.`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
@@ -404,7 +379,7 @@
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
               setGeneratingTopics(true);
-              const prompt = `Genera el temario oficial ACTUALIZADO para: "${editForm.type}". Devuelve JSON array: [{"name": "Tema X", "pct": numero}]. Total 100%. Máximo 20 temas.`;
+              const prompt = `Genera el temario oficial actual de: "${editForm.type}". Devuelve JSON array: [{"name": "Tema X", "pct": numero}]. Total 100%. Máximo 20 temas.`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
@@ -416,7 +391,7 @@
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
               setSearchingLastCall(true);
-              const prompt = `Busca datos de la ÚLTIMA convocatoria (2024/2025) de: "${editForm.type}". Devuelve ÚNICAMENTE JSON: {"date": "YYYY-MM-DD", "url": "web_oficial", "seats": "numero_plazas", "cutOff": "puntos_o_porcentaje", "examUrl": "url_pdf_examen"}.`;
+              const prompt = `Busca datos oficiales sobre la última convocatoria de: "${editForm.type}". IMPORTANTE: La 'Nota de Corte' es el umbral para aprobar el examen test, suele ser un valor alto (ej: 60-80% o su equivalente en puntos). No devuelvas valores triviales menores al 50% si no es estrictamente real. Devuelve JSON: {"date": "YYYY-MM-DD", "url": "web_organismo", "seats": "numero_plazas", "cutOff": "valor_puntos_o_porcentaje", "examUrl": "url_pdf_examen"}.`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   let data = extractJSON(res);
@@ -450,7 +425,7 @@
                                               {descResults.map((r, i) => (
                                                   <button key={i} onClick={() => { setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o }); setDescResults([]); }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0 group">
                                                       <div className="font-bold">{r.label}</div>
-                                                      <div className="text-[10px] text-slate-500">{r.q} Preus. | {r.t} Min. | Corte {r.c}%</div>
+                                                      <div className="text-[10px] text-slate-500">{r.q} Pregs. | {r.t} Min. | {r.c}% Corte</div>
                                                   </button>
                                               ))}
                                           </div>
@@ -467,32 +442,28 @@
 
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
                               <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentos PDF Subidos</h4>
+                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentos PDF Anexos</h4>
                                   <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
-                                      <Icons.Upload size={14}/> {pdfProcessing ? `Leyendo ${pdfProgress}%` : "Añadir PDF"}
+                                      <Icons.Upload size={14}/> {pdfProcessing ? `Cargando...` : "Añadir PDF"}
                                       <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
                                   </label>
                               </div>
-                              <div className="space-y-2 mb-4">
-                                  {editForm.files.map((file, idx) => (
-                                      <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
-                                          <div className="flex-1 min-w-0 font-bold truncate text-white text-sm">{file.name}</div>
-                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
-                                              <input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
-                                              <span className="text-xs font-bold text-slate-500 pr-1">%</span>
-                                          </div>
-                                          <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Icons.Trash2 size={16}/></button>
+                              {editForm.files.map((file, idx) => (
+                                  <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 mb-2">
+                                      <div className="flex-1 min-w-0 font-bold truncate text-white text-sm">{file.name}</div>
+                                      <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
+                                          <input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
+                                          <span className="text-xs font-bold text-slate-500 pr-1">%</span>
                                       </div>
-                                  ))}
-                              </div>
+                                      <button onClick={() => handleDeleteFile(idx)} className="p-2 text-red-400"><Icons.Trash2 size={16}/></button>
+                                  </div>
+                              ))}
                           </div>
 
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-indigo-900/10 border-indigo-500/30">
                               <div className="flex justify-between items-center mb-4">
                                   <h4 className="text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria</h4>
-                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">
-                                      {searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Search size={14}/>} Auto-Buscar Datos
-                                  </button>
+                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-indigo-600 px-3 py-1 rounded font-bold flex items-center gap-1">{searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Search size={14}/>} Auto-Buscar Datos</button>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.date || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, date: e.target.value}})} /></div>
@@ -507,7 +478,7 @@
                                   <label className="flex items-center gap-2 cursor-pointer">
                                       <input type="checkbox" checked={editForm.lastCall?.useExam || false} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, useExam: e.target.checked}})} className="w-4 h-4 accent-indigo-500"/>
                                       <span className="text-xs text-white">Incluir en simulacros: </span>
-                                      {editForm.lastCall?.useExam && <input type="number" className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-xs text-white" value={editForm.lastCall?.examPct || 0} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examPct: parseFloat(e.target.value)}})} />}
+                                      {editForm.lastCall?.useExam && <input type="number" className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-xs text-white ml-2" value={editForm.lastCall?.examPct || 0} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examPct: parseFloat(e.target.value)}})} />}
                                       <span className="text-xs text-white">%</span>
                                   </label>
                               </div>
@@ -515,7 +486,7 @@
 
                           <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
                               <div className="flex justify-between items-center mb-4">
-                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Internet)</label>
+                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Internet) <span className="text-xs text-slate-500">[{internetPct}% del total]</span></label>
                                   <div className="flex gap-2">
                                       <button onClick={handleMagicWand} disabled={generatingTopics} className="text-xs bg-purple-600 px-3 py-1 rounded font-bold flex items-center gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
                                       <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold">+ Tema</button>
@@ -523,25 +494,23 @@
                               </div>
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
-                                      <input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} />
+                                      <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} />
                                       <input type="number" className="w-24 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} />
                                       <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2"><Icons.Trash2 size={18} /></button>
                                   </div>
                               ))}
-                              <div className="text-right mt-2 text-xs font-bold border-t border-slate-700 pt-2 text-slate-500">Suma: {topicsTotal}%</div>
+                              <div className="text-right mt-2 text-xs font-bold border-t border-slate-700 pt-2 text-slate-500">Repartido: <span className={Math.abs(topicsTotal-100)<1?'text-green-400':'text-yellow-500'}>{topicsTotal}%</span></div>
                           </div>
 
-                          <div className="glass-panel p-6 rounded-xl">
-                              <div className="grid grid-cols-3 gap-4">
-                                  <div><label className="text-xs font-bold text-green-400 block mb-1">Acierto</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-green-400 font-bold text-right" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-red-400 block mb-1">Fallo</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-red-400 font-bold text-right" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-slate-400 block mb-1">Omisión</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
-                              </div>
+                          <div className="glass-panel p-6 rounded-xl grid grid-cols-3 gap-4">
+                              <div><label className="text-xs font-bold text-green-400 block mb-1">Acierto</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-green-400 font-bold text-right" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
+                              <div><label className="text-xs font-bold text-red-400 block mb-1">Fallo</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-red-400 font-bold text-right" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
+                              <div><label className="text-xs font-bold text-slate-400 block mb-1">Omisión</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
                           </div>
                           
                           <div className="flex gap-4 pt-6 mt-4 border-t border-slate-700">
                               <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
-                              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar</button>
+                              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar Materia</button>
                           </div>
                       </div>
                   </div>
@@ -555,8 +524,8 @@
                       {subjects.map(sub => (
                           <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer relative ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
                               <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                              {sub.lastCall?.date && <div className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-indigo-300">Convocatoria: {new Date(sub.lastCall.date).toLocaleDateString()} | Plazas: {sub.lastCall.seats}</div>}
-                              <div className="flex justify-end gap-2 mt-4"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 text-red-400"><Icons.Trash2 size={18}/></button></div>
+                              {sub.lastCall?.date && <div className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-indigo-300">Última: {new Date(sub.lastCall.date).toLocaleDateString()} | Plazas: {sub.lastCall.seats}</div>}
+                              <div className="flex justify-end gap-2 mt-4"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 text-blue-400 hover:bg-slate-800 rounded"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 text-red-400 hover:bg-slate-800 rounded"><Icons.Trash2 size={18}/></button></div>
                           </div>
                       ))}
                   </div>
@@ -589,8 +558,7 @@
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
               const files = activeSubject.files || [];
-              const useOfficial = activeSubject.lastCall?.useExam;
-              const officialPct = useOfficial ? (activeSubject.lastCall.examPct || 0) : 0;
+              const officialPct = (activeSubject.lastCall?.useExam) ? (activeSubject.lastCall.examPct || 0) : 0;
               let plan = []; 
               files.forEach(f => {
                   const count = Math.round((f.pct / 100) * totalQs);
@@ -598,8 +566,7 @@
               });
               const officialCount = Math.round((officialPct / 100) * totalQs);
               if (officialCount > 0) plan.push({ type: 'official', id: 'off', name: activeSubject.lastCall.date, url: activeSubject.lastCall.examUrl, count: officialCount });
-              const assignedCount = plan.reduce((s,p) => s + p.count, 0);
-              const internetCount = Math.max(0, totalQs - assignedCount); 
+              const internetCount = Math.max(0, totalQs - plan.reduce((s,p) => s + p.count, 0)); 
               if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet', count: internetCount });
               let queue = [];
               plan.forEach(source => {
@@ -627,7 +594,7 @@
           const startExam = async () => {
               if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
               const queue = generateBatchPlan();
-              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Iniciando Simulador Pro...', error: null });
+              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Iniciando simulador...', error: null });
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
@@ -638,6 +605,12 @@
               finally { isFetchingRef.current = false; }
           };
 
+          const handleAnswer = (optionIdx) => {
+              updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
+              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
+              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) { setTimeout(() => setShowFinishConfirm(true), 500); }
+          };
+
           const executeFinish = () => {
               setShowFinishConfirm(false);
               let hits = 0, misses = 0, skips = 0;
@@ -645,19 +618,18 @@
                   const ans = answers[idx];
                   if (ans === undefined || ans === -1) skips++; else if (ans === q.correct) hits++; else misses++;
               });
-              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
-              const totalPossible = activeSubject.qCount;
-              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage: (points / (activeSubject.qCount * activeSubject.pointsHit)) * 100, hits, misses, skips, total: totalPossible, maxScorePossible: activeSubject.qCount * activeSubject.pointsHit, cutOffPoints: (activeSubject.cutOffPct / 100) * (activeSubject.qCount * activeSubject.pointsHit) });
+              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss);
+              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage: (points / (activeSubject.qCount * activeSubject.pointsHit)) * 100, hits, misses, skips, total: activeSubject.qCount, maxScorePossible: activeSubject.qCount * activeSubject.pointsHit, cutOffPoints: (activeSubject.cutOffPct / 100) * (activeSubject.qCount * activeSubject.pointsHit) });
               updateState({ status: 'finished' });
           };
 
           if (status === 'idle') return (
               <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                  {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
+                  {!activeSubject ? <div className="text-slate-500">Selecciona materia para comenzar</div> : (
                       <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
                           <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                           <p className="text-slate-400 mb-8">{activeSubject.type}</p>
-                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR SIMULACRO</button>
+                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-all scale-100 hover:scale-105"><Icons.Play size={24}/> COMENZAR</button>
                       </div>
                   )}
               </div>
@@ -665,49 +637,39 @@
 
           if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
 
-          const stats = (() => {
-              let h=0, m=0, s=0;
-              questions.forEach((q,idx)=>{
-                  const a=answers[idx]; if(a===undefined||a===-1) s++; else if(a===q.correct) h++; else m++;
-              });
-              const pts = (h * activeSubject.pointsHit) + (m * activeSubject.pointsMiss);
-              return {h,m,s,pts};
-          })();
-
-          const currentQ = questions[currentIndex];
           const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
+          const currentQ = questions[currentIndex];
 
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
                   <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
-                      <div className="flex justify-between items-center mb-2">
+                      <div className="flex justify-between items-center mb-2 px-2">
                           <div className="flex items-center gap-8">
-                              <div className="flex items-center gap-3"><div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div></div>
+                              <div className="text-xl font-mono font-bold text-white bg-slate-800 px-3 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
                               <div className="hidden sm:block leading-tight">
                                   <div className="text-xl font-bold text-white">{currentIndex + 1} <span className="text-slate-500">/ {activeSubject.qCount}</span> <span className="text-sm font-mono text-blue-400 font-normal ml-2">[{progressPct}%]</span></div>
                               </div>
                           </div>
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 rounded text-blue-400"><Icons.Grid size={18}/></button>
-                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 rounded text-xs font-bold border border-yellow-800 text-yellow-200">Reset</button>
+                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 rounded text-xs font-bold border border-yellow-800 text-yellow-200">Re-iniciar</button>
                               <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 rounded text-xs font-bold border border-red-800 text-red-200">Terminar</button>
                           </div>
                       </div>
-                      <div className="grid grid-cols-6 gap-2 mb-2 items-center">
+                      <div className="grid grid-cols-6 gap-2 mb-2 items-center px-2">
                           <div className="col-span-4 grid grid-cols-5 gap-2">
-                              <div className="bg-green-900/20 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 font-bold uppercase">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.h}</div></div>
-                              <div className="bg-red-900/20 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 font-bold uppercase">Fallos</div><div className="text-xs font-bold text-red-400">{stats.m}</div></div>
-                              <div className="bg-slate-800/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 font-bold uppercase">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.s}</div></div>
-                              <div className="bg-indigo-900/20 rounded px-1 py-1 text-center"><div className="text-[8px] text-indigo-400 font-bold uppercase">Netas</div><div className="text-xs font-bold text-indigo-300">{stats.h - stats.m}</div></div>
-                              <div className="bg-purple-900/20 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 font-bold uppercase">Corte</div><div className="text-xs font-bold text-white">{((activeSubject.qCount * activeSubject.pointsHit * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
+                              <div className="bg-green-900/20 rounded py-1 text-center"><div className="text-[8px] text-green-500 font-bold uppercase">Aciertos</div><div className="text-xs font-bold text-green-400">{Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length}</div></div>
+                              <div className="bg-red-900/20 rounded py-1 text-center"><div className="text-[8px] text-red-500 font-bold uppercase">Fallos</div><div className="text-xs font-bold text-red-400">{Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length}</div></div>
+                              <div className="bg-slate-800/50 rounded py-1 text-center"><div className="text-[8px] text-slate-400 font-bold uppercase">Omitidas</div><div className="text-xs font-bold text-slate-300">{Object.values(answers).filter(a=>a===-1).length}</div></div>
+                              <div className="bg-indigo-900/20 rounded py-1 text-center"><div className="text-[8px] text-indigo-400 font-bold uppercase">Netas</div><div className="text-xs font-bold text-indigo-300">{(Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length) - (Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length)}</div></div>
+                              <div className="bg-purple-900/20 rounded py-1 text-center"><div className="text-[8px] text-purple-400 font-bold uppercase">Corte</div><div className="text-xs font-bold text-white">{((activeSubject.qCount * activeSubject.pointsHit * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
                           </div>
                           <div className="bg-slate-800 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2">
                               <div className="text-[9px] text-yellow-500 font-bold uppercase leading-none">Tasa Global</div>
-                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none">{((stats.h / activeSubject.qCount) * 100).toFixed(1)}%</div>
-                              <div className="text-[9px] text-yellow-200/60 font-bold mt-0.5">Puntos: {stats.pts.toFixed(1)}</div>
+                              <div className="text-2xl font-display font-bold text-yellow-400 leading-none">{( (Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length / activeSubject.qCount)*100 ).toFixed(1)}%</div>
                           </div>
                       </div>
-                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full"><div className="absolute top-0 left-0 h-full bg-green-500 transition-all" style={{width: `${(stats.pts / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%`}}></div></div>
+                      <div className="relative h-1.5 bg-slate-800 rounded-full overflow-hidden mx-2"><div className="absolute top-0 left-0 h-full bg-green-500 transition-all duration-500" style={{width: `${(Object.keys(answers).length / activeSubject.qCount) * 100}%`}}></div></div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
@@ -730,21 +692,24 @@
                                 </div>
                                 {answers[currentIndex] !== undefined && answers[currentIndex] !== currentQ.correct && <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm">{currentQ.explanation}</div>}
                               </>
-                          ) : <div className="flex flex-col items-center justify-center py-20 animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold text-white">GENERANDO PREGUNTAS...</div></div>}
+                          ) : <div className="flex flex-col items-center justify-center py-20 animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold text-white font-display">GENERANDO PREGUNTAS...</div></div>}
                       </div>
                   </div>
 
                   <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                       <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase">Omitir</button>
                        <div className="flex gap-2">
-                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 rounded-lg text-white shadow-lg"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 rounded-lg text-white shadow-lg"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                       </div>
+                       <div className="flex gap-2">
+                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white shadow-lg"><Icons.ArrowLeft size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white shadow-lg"><Icons.ArrowRight size={20}/></button>
                        </div>
                   </div>
 
                   <Modal isOpen={showRestartConfirm} title="¿REINICIAR?" message="Se perderá el progreso actual." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={() => { setShowRestartConfirm(false); updateState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, batchQueue: [] }); }} />
-                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Seguro que quieres finalizar y guardar?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })}><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
+                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Guardar resultado actual?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4 font-bold text-white">Mapa del Simulacro <button onClick={() => updateState({ showGrid: false })}><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
                       {Array.from({length: activeSubject.qCount}).map((_, i) => {
                           let bg = "bg-slate-800 text-slate-500 border-slate-700";
                           const ans = answers[i];
@@ -766,14 +731,14 @@
               if (results.length === 0) return null;
               const total = results.length;
               const avgScore = results.reduce((acc, r) => acc + (r.score || 0), 0) / total;
+              const avgPct = results.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
               const avgProgress = results.reduce((acc, r) => acc + (((r.hits+r.misses+r.skips)/r.total)*100), 0) / total;
+              const avgHits = results.reduce((acc, r) => acc + r.hits, 0) / total;
+              const avgMisses = results.reduce((acc, r) => acc + r.misses, 0) / total;
+              const avgSkips = results.reduce((acc, r) => acc + r.skips, 0) / total;
               const avgNetas = results.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
               const avgGlobalHitRate = results.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
-              // Para la escala de la gráfica
-              const maxPointsPossible = results[0]?.maxScorePossible || 600;
-              const cutOffLine = results[0]?.cutOffPoints || 0;
-
-              return { total, avgScore, avgProgress, avgNetas, avgGlobalHitRate, maxPointsPossible, cutOffLine };
+              return { total, avgScore, avgPct, avgProgress, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, maxPointsPossible: results[0]?.maxScorePossible || 600, cutOffLine: results[0]?.cutOffPoints || 0 };
           }, [results]);
 
           return (
@@ -781,47 +746,56 @@
                   <div className="flex justify-between items-center mb-6 shrink-0">
                       <h3 className="text-2xl font-display font-bold text-white">Historial</h3>
                       <div className="flex gap-2">
-                          <button onClick={() => setShowGraph(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.BarChart3 size={16}/> GRÁFICO</button>
-                          <button onClick={onClear} className="text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-900/20 rounded">Limpiar</button>
+                          <button onClick={() => setShowGraph(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-transform scale-100 active:scale-95"><Icons.BarChart3 size={16}/> GRÁFICO</button>
+                          <button onClick={onClear} className="text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-900/20 rounded">Limpiar Todo</button>
                       </div>
                   </div>
+
                   {stats && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
-                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Exámenes</div><div className="text-xl font-bold text-white">{stats.total}</div></div>
-                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Media Netas</div><div className="text-xl font-bold text-indigo-400">{stats.avgNetas.toFixed(1)}</div></div>
-                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Acierto Global</div><div className="text-xl font-bold text-green-400">{stats.avgGlobalHitRate.toFixed(1)}%</div></div>
-                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Progreso</div><div className="text-xl font-bold text-yellow-400">{stats.avgProgress.toFixed(1)}%</div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold text-white">{stats.total}</div><div className="text-xs text-slate-400 uppercase">Simulacros</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-white">{stats.avgScore.toFixed(1)}</div><div className="text-xs text-slate-400 uppercase">Nota Media</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold text-white">{stats.avgGlobalHitRate.toFixed(1)}%</div><div className="text-xs text-slate-400 uppercase">% Acierto</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-yellow-500/20 rounded-full text-yellow-400"><Icons.Clock/></div><div><div className="text-2xl font-bold text-white">{stats.avgProgress.toFixed(0)}%</div><div className="text-xs text-slate-400 uppercase">% Progreso</div></div></div>
+                          <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-4 gap-2 text-center border-slate-800">
+                              <div><div className="text-[10px] text-green-500 uppercase font-bold">Media Aciertos</div><div className="text-lg font-bold text-white">{stats.avgHits.toFixed(1)}</div></div>
+                              <div className="border-l border-slate-700"><div className="text-[10px] text-red-500 uppercase font-bold">Media Fallos</div><div className="text-lg font-bold text-white">{stats.avgMisses.toFixed(1)}</div></div>
+                              <div className="border-l border-slate-700"><div className="text-[10px] text-slate-400 uppercase font-bold">Media Omitidas</div><div className="text-lg font-bold text-white">{stats.avgSkips.toFixed(1)}</div></div>
+                              <div className="border-l border-slate-700"><div className="text-[10px] text-indigo-400 uppercase font-bold">Media Netas</div><div className="text-lg font-bold text-indigo-300">{stats.avgNetas.toFixed(1)}</div></div>
+                          </div>
                       </div>
                   )}
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl flex-1 relative overflow-auto">
+
+                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl flex-1 relative overflow-auto custom-scrollbar">
                       <table className="w-full text-left">
-                          <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">% Acierto</th><th className="p-4 text-center">Progreso</th><th className="p-4 text-right">A/F/O [Net]</th><th className="p-4"></th></tr></thead>
+                          <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">Nota %</th><th className="p-4 text-center">% Acierto</th><th className="p-4 text-center">Progreso</th><th className="p-4 text-right">A/F/O [Net]</th><th className="p-4"></th></tr></thead>
                           <tbody className="divide-y divide-slate-800 text-slate-300">
                               {results.map((r, i) => (
                                   <tr key={i} className="hover:bg-slate-800/30">
-                                      <td className="p-4 text-xs">{new Date(r.date).toLocaleDateString()}</td>
+                                      <td className="p-4 text-xs font-mono">{new Date(r.date).toLocaleDateString()}</td>
                                       <td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td>
                                       <td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td>
-                                      <td className="p-4 text-center text-green-400">{((r.hits/r.total)*100).toFixed(1)}%</td>
-                                      <td className="p-4 text-center text-xs text-slate-500">{( ((r.hits+r.misses+r.skips)/r.total)*100 ).toFixed(0)}%</td>
+                                      <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[10px] font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td>
+                                      <td className="p-4 text-center text-green-400 font-bold">{((r.hits/r.total)*100).toFixed(1)}%</td>
+                                      <td className="p-4 text-center text-[10px] text-slate-500">{( ((r.hits+r.misses+r.skips)/r.total)*100 ).toFixed(0)}%</td>
                                       <td className="p-4 text-right text-xs font-mono">{r.hits}/{r.misses}/{r.skips} <span className="text-indigo-300 font-bold ml-1">[{r.hits-r.misses}]</span></td>
-                                      <td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="text-red-500 p-2"><Icons.Trash2 size={14}/></button></td>
+                                      <td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="text-red-500 p-2 hover:bg-red-900/20 rounded-full"><Icons.Trash2 size={14}/></button></td>
                                   </tr>
                               ))}
                           </tbody>
                       </table>
                   </div>
+
                   {showGraph && (
-                      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-6" onClick={() => setShowGraph(false)}>
+                      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-6 fade-in" onClick={() => setShowGraph(false)}>
                           <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                              <div className="flex justify-between items-center mb-6">
-                                 <h3 className="text-2xl font-bold text-white flex items-center gap-3"><Icons.BarChart3 size={28} className="text-blue-500"/> Evolución de Simulacros</h3>
+                                 <h3 className="text-2xl font-bold text-white flex items-center gap-3 font-display"><Icons.BarChart3 size={28} className="text-blue-500"/> Evolución Puntos</h3>
                                  <button onClick={() => setShowGraph(false)} className="text-slate-400 p-2 hover:bg-slate-800 rounded-full"><Icons.XCircle size={32}/></button>
                              </div>
-                             <div className="flex-1 overflow-x-auto border border-slate-800 rounded-xl bg-black/40 p-6 relative">
+                             <div className="flex-1 overflow-x-auto border border-slate-800 rounded-xl bg-black/40 p-6 relative custom-scrollbar">
                                   <div style={{minWidth: `${Math.max(800, results.length * 80)}px`, height: '420px', position: 'relative'}}>
                                        <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(800, results.length * 80)} 420`}>
-                                            {/* ESCALA VERTICAL Y RETICULADO CADA 20 PUNTOS */}
                                             {(() => {
                                                 const steps = [];
                                                 const maxVal = stats.maxPointsPossible;
@@ -836,12 +810,8 @@
                                                 }
                                                 return steps;
                                             })()}
-                                            
-                                            {/* Ejes Principales */}
                                             <line x1="50" y1="360" x2="100%" y2="360" stroke="#475569" strokeWidth="2" />
                                             <line x1="50" y1="40" x2="50" y2="360" stroke="#475569" strokeWidth="2" />
-
-                                            {/* LÍNEA VERDE: NOTA DE CORTE */}
                                             {(() => {
                                                 const maxV = stats.maxPointsPossible;
                                                 const cutY = 360 - (stats.cutOffLine / maxV * 320);
@@ -852,8 +822,6 @@
                                                     </g>
                                                 );
                                             })()}
-
-                                            {/* Línea Amarilla: Media de Puntos */}
                                             {(() => {
                                                 const maxV = stats.maxPointsPossible;
                                                 const avgY = 360 - (stats.avgScore / maxV * 320);
@@ -864,8 +832,6 @@
                                                     </g>
                                                 );
                                             })()}
-
-                                            {/* BARRAS DE DATOS */}
                                             {results.slice().reverse().map((h, i) => {
                                                 const maxV = stats.maxPointsPossible;
                                                 const barH = (h.score / maxV) * 320;
@@ -874,7 +840,7 @@
                                                 return (
                                                     <g key={i}>
                                                         <rect x={xP} y={yP} width="40" height={barH} fill="#3b82f6" rx="4" className="hover:fill-blue-400 transition-colors" />
-                                                        <text x={xP + 20} y={yP - 10} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{h.score.toFixed(1)}</text>
+                                                        <text x={xP + 20} y={yP - 10} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{h.score.toFixed(1)}</text>
                                                         <text x={xP + 20} y={380} textAnchor="middle" fill="#94a3b8" fontSize="9">{new Date(h.date).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'})}</text>
                                                     </g>
                                                 );
@@ -882,7 +848,7 @@
                                        </svg>
                                   </div>
                              </div>
-                             <div className="mt-4 text-center text-slate-500 text-xs italic">Escala vertical dinámica ajustada a {stats.maxPointsPossible} puntos máximos.</div>
+                             <div className="mt-4 text-center text-slate-500 text-xs italic">Escala dinámica ajustada al baremo de la oposición.</div>
                           </div>
                       </div>
                   )}
@@ -898,14 +864,14 @@
                       <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'danger' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
                           <Icons.AlertTriangle size={40} />
                       </div>
-                      <h3 className="text-xl font-bold text-white mb-2 uppercase">{title}</h3>
-                      <p className="text-slate-400 text-sm mb-8">{message}</p>
+                      <h3 className="text-xl font-bold text-white mb-2 uppercase font-display">{title}</h3>
+                      <p className="text-slate-400 text-sm mb-8 leading-relaxed">{message}</p>
                       <div className="flex gap-3">
                           {onConfirm ? (
-                              <><button onClick={onClose} className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl">Cancelar</button>
-                                <button onClick={onConfirm} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl">Confirmar</button></>
+                              <><button onClick={onClose} className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl">CANCELAR</button>
+                                <button onClick={onConfirm} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl">CONFIRMAR</button></>
                           ) : (
-                              <button onClick={onClose} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">Entendido</button>
+                              <button onClick={onClose} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">ENTENDIDO</button>
                           )}
                       </div>
                   </div>
@@ -925,29 +891,29 @@
           const [examSession, setExamSession] = useState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
 
           const isAuth = isRegistered || _bg_check_sys(rk);
-          const trialExhausted = tc >= 10; // Límite actualizado a 10
+          const trialExhausted = tc >= 10;
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
 
           const handleActivate = (code) => {
               if(!code) return;
               if(_bg_check_sys(code)) {
                   setRk(code); setIsRegistered(true); 
-                  setModal({ open: true, title: 'ACTIVACIÓN ÉXITO', message: 'Sistema registrado correctamente.', type: 'success' });
+                  setModal({ open: true, title: 'REGISTRADO', message: 'Sistema activado correctamente.', type: 'success' });
               } else {
                   setRk(''); setIsRegistered(false); setTc(0);
-                  setModal({ open: true, title: 'ERROR', message: 'Código no válido. Sistema reseteado.', type: 'danger' });
+                  setModal({ open: true, title: 'ERROR', message: 'Código inválido. Contador reiniciado.', type: 'danger' });
               }
           };
 
           return (
               <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
                   <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
-                      <div><h1 className="text-2xl md:text-3xl font-display font-bold"><span className="text-blue-600">Boarding</span>Gate</h1><p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Simulador Oposiciones AI</p></div>
-                      <nav className="flex bg-slate-800 rounded-lg p-1">
-                          <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>Materias</button>
-                          <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>Simulacro</button>
-                          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>Historial</button>
-                          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>Config</button>
+                      <div><h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight"><span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Oposiciones Simulador AI</p></div>
+                      <nav className="flex bg-slate-800 rounded-lg p-1 gap-1">
+                          <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Materias</button>
+                          <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Simulacro</button>
+                          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Histórico</button>
+                          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Config</button>
                       </nav>
                   </header>
 
@@ -955,12 +921,12 @@
                       {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
                       {activeTab === 'exam' && (
                           (!isAuth && trialExhausted) ? (
-                              <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                              <div className="h-full flex flex-col items-center justify-center p-6 text-center fade-in">
                                   <div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl">
                                       <Icons.AlertTriangle size={48} className="text-red-500 mx-auto mb-6" />
-                                      <h2 className="text-2xl font-bold mb-4 uppercase">PRUEBA FINALIZADA</h2>
-                                      <p className="text-slate-400 text-sm mb-6">Has agotado las 10 sesiones de cortesía. Registra la aplicación para continuar.</p>
-                                      <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 font-bold rounded-xl">REGISTRAR AHORA</button>
+                                      <h2 className="text-2xl font-bold mb-4 uppercase font-display">PRUEBA FINALIZADA</h2>
+                                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">Has agotado tus 10 sesiones de cortesía. Para seguir usando el sistema sin límites, solicita tu activación.</p>
+                                      <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 font-bold rounded-xl transition-all shadow-lg hover:bg-blue-500">ACTIVAR SISTEMA</button>
                                   </div>
                               </div>
                           ) : (

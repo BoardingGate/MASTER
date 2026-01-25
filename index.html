@@ -48,6 +48,7 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
+      // Sistema de validación
       const _bg_check_sys = (k) => {
           if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
           const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
@@ -80,7 +81,9 @@
         FileText: (p) => <IconBase {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></IconBase>,
         Upload: (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></IconBase>,
         Globe: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></IconBase>,
-        HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>
+        HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>,
+        Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>,
+        Wand: (p) => <IconBase {...p}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2L11 5"/></IconBase>
       };
 
       const DB_NAME = 'BoardingGateDB';
@@ -144,90 +147,48 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
+      const askGemini = async (apiKey, prompt) => {
           const savedModel = window.localStorage.getItem('gemini_model');
           const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
-          
-          const optCount = subject.optionsCount || 4;
-          const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
-          
-          let contextInstruction = "";
-          
-          if (sourceConfig.type === 'pdf') {
-              contextInstruction = `
-                --- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) ---
-                ${sourceConfig.content.substring(0, 950000)}
-                --- FIN CONTEXTO ---
-                
-                INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba. No uses información externa. Si el texto no es suficiente, genera menos preguntas pero que sean felices al texto.
-              `;
-          } else {
-              contextInstruction = `
-                Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}.
-                INSTRUCCIÓN: Usa tu conocimiento general para generar preguntas sobre estos temas.
-              `;
-          }
-
-          const prompt = `
-            Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}).
-            ${contextInstruction}
-
-            Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta).
-            IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}).
-            NO repetir preguntas anteriores.
-            Añade el campo "topic" indicando el subtema específico.
-            
-            Responde ÚNICAMENTE con JSON válido:
-            [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]
-          `;
-
           const safetySettings = [
               { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
           ];
-
           try {
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                      contents: [{ parts: [{ text: prompt }] }],
-                      safetySettings: safetySettings,
-                      generationConfig: { temperature: 0.6 }
-                  })
+                  body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], safetySettings: safetySettings })
               });
-
-              if (!response.ok) {
-                  const errData = await response.json();
-                  throw new Error(errData.error?.message || JSON.stringify(errData, null, 2)); 
-              }
-
+              if (!response.ok) throw new Error("API Error");
               const data = await response.json();
-              if (!data.candidates || data.candidates.length === 0) throw new Error("Respuesta vacía de IA");
+              return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          } catch (e) { console.error(e); throw e; }
+      };
 
-              const candidate = data.candidates?.[0];
-              const text = candidate?.content?.parts?.[0]?.text || "[]";
-              
-              const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-              const startInfo = cleanText.indexOf('[');
-              const endInfo = cleanText.lastIndexOf(']');
-              let finalText = cleanText;
-              
-              if(startInfo !== -1 && endInfo !== -1) finalText = cleanText.substring(startInfo, endInfo + 1);
+      const extractJSON = (text) => {
+          const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const startInfo = cleanText.indexOf('[');
+          const endInfo = cleanText.lastIndexOf(']');
+          if(startInfo !== -1 && endInfo !== -1) return JSON.parse(cleanText.substring(startInfo, endInfo + 1));
+          return [];
+      };
 
-              const parsed = JSON.parse(finalText);
-              return parsed.map(q => ({
-                  ...q,
-                  origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]`
-              }));
-
-          } catch (e) {
-              console.warn("Fallo en lote:", e);
-              if(e.message.includes("API key")) throw e;
-              return []; 
+      const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
+          const optCount = subject.optionsCount || 4;
+          const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
+          let contextInstruction = "";
+          if (sourceConfig.type === 'pdf') {
+              contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${sourceConfig.content.substring(0, 950000)} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
+          } else {
+              contextInstruction = `Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa tu conocimiento general para generar preguntas sobre estos temas.`;
           }
+          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
+          const rawText = await askGemini(apiKey, prompt);
+          const parsed = extractJSON(rawText);
+          return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]` }));
       };
 
       const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
@@ -248,14 +209,8 @@
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ contents: [{ parts: [{ text: "OK" }] }] })
                   });
-                  if(response.ok) {
-                      setTestStatus('success');
-                  } else {
-                      const err = await response.json();
-                      let errMsg = err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err);
-                      setTestStatus('error');
-                      setErrorDetail(errMsg);
-                  }
+                  if(response.ok) { setTestStatus('success'); } 
+                  else { const err = await response.json(); setTestStatus('error'); setErrorDetail(err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err)); }
               } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
           };
 
@@ -273,7 +228,6 @@
                                   <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black/50 border border-slate-600 rounded-xl p-4 pr-12 text-white focus:border-purple-500 focus:outline-none font-mono"/>
                                   <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">{showKey ? <Icons.EyeOff size={20}/> : <Icons.Eye size={20}/>}</button>
                               </div>
-                              
                               <div className="flex gap-4 items-end">
                                   <div className="flex-1">
                                       <label className="block text-xs font-bold text-slate-400 mb-1">Modelo de IA</label>
@@ -298,7 +252,7 @@
                                   <li>Haz clic en el botón azul <strong>"Get API key"</strong> en la esquina superior izquierda.</li>
                                   <li>En el cuadro emergente, haz clic en <strong>"Create API key in new project"</strong>.</li>
                                   <li>Se generará una clave con una ristra de letras y números. Cópiala.</li>
-                                  <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong> de este formulario.</li>
+                                  <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong>.</li>
                               </ol>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
                           </div>
@@ -310,43 +264,29 @@
                           <div className={`p-3 rounded-xl ${isAuth ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.CheckCircle size={32} /></div>
                           <div><h2 className="text-2xl font-bold text-white">Registro de la aplicación</h2><p className="text-slate-400 text-sm">Estado de la instalación y licencia</p></div>
                       </div>
-                      
                       <div className="space-y-6">
                           <p className="text-sm text-slate-400 leading-relaxed italic">
                               Esta plataforma es un proyecto independiente que se sustenta exclusivamente mediante un modelo de <strong>crowdfunding</strong> y las aportaciones directas de sus usuarios. Tu registro ayuda a mantener los costes de desarrollo y mantenimiento.
                           </p>
-
                           <div className="bg-black/30 border border-slate-700 rounded-xl p-5">
                               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Número de Registro / Código de Instalación</label>
                               <div className="flex gap-3">
-                                  <input 
-                                      type="text" 
-                                      value={localLic} 
-                                      onChange={(e) => setLocalLic(e.target.value.toUpperCase())}
-                                      placeholder="BG-XXXX-XXXX" 
-                                      className={`flex-1 bg-slate-900 border ${isAuth ? 'border-green-600' : 'border-slate-600'} rounded-lg p-3 text-white font-mono focus:outline-none`} 
-                                  />
+                                  <input type="text" value={localLic} onChange={(e) => setLocalLic(e.target.value.toUpperCase())} placeholder="BG-XXXX-XXXX" className={`flex-1 bg-slate-900 border ${isAuth ? 'border-green-600' : 'border-slate-600'} rounded-lg p-3 text-white font-mono focus:outline-none`} />
                                   <button onClick={() => onActivate(localLic)} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs">ACTIVAR</button>
                               </div>
                               {isAuth && <div className="mt-3 text-center text-green-400 text-xs font-bold uppercase tracking-widest">● Dispositivo Registrado</div>}
                           </div>
-
                           {!isAuth && (
                               <div className="flex justify-between items-center bg-blue-900/10 border border-blue-500/30 rounded-xl p-4">
                                   <div className="text-sm text-blue-200">
                                       Periodo de cortesía consumido: <span className="font-bold ml-1">{trialCount} de 4 sesiones</span>
                                   </div>
-                                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-                                      <div className="h-full bg-blue-500" style={{width: `${(trialCount/4)*100}%`}}></div>
-                                  </div>
+                                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: `${(trialCount/4)*100}%`}}></div></div>
                               </div>
                           )}
-
                           <div className="text-center bg-slate-800/50 p-4 rounded-xl">
                               <p className="text-xs text-slate-400 mb-2">Para obtener tu Nº de registro o colaborar con el crowdfunding:</p>
-                              <a href="https://x.com/BoardingGate" target="_blank" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-bold transition-colors">
-                                  <Icons.Globe size={16}/> @BoardingGate en X (Twitter)
-                              </a>
+                              <a href="https://x.com/BoardingGate" target="_blank" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-bold transition-colors"><Icons.Globe size={16}/> @BoardingGate en X (Twitter)</a>
                           </div>
                       </div>
                   </div>
@@ -359,41 +299,30 @@
           const [editForm, setEditForm] = useState(null);
           const [pdfProcessing, setPdfProcessing] = useState(false);
           const [pdfProgress, setPdfProgress] = useState(0);
+          const [searchingDesc, setSearchingDesc] = useState(false);
+          const [descResults, setDescResults] = useState([]);
+          const [generatingTopics, setGeneratingTopics] = useState(false);
           
           const defaultSubject = { 
-              id: null, name: '', type: '', 
-              qCount: 200, cutOffPct: 90, timeMinutes: 270, 
-              pointsHit: 3, pointsMiss: -1, pointsSkip: 0, 
-              optionsCount: 4, 
-              topics: [{ name: 'Temario General', pct: 100 }], 
-              files: [] 
+              id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
+              pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, 
+              topics: [{ name: 'Temario General', pct: 100 }], files: [] 
           };
 
-          const handleNew = () => { 
-              setEditForm({ ...defaultSubject, id: Date.now() }); 
-              setIsEditing(true); 
-          };
-          
-          const handleEdit = (sub) => { 
-              const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] };
-              setEditForm(safeSub);
-              setIsEditing(true); 
-          };
+          const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
+          const handleEdit = (sub) => { const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; setEditForm(safeSub); setIsEditing(true); };
 
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               if (totalPdfPct > 100) return alert(`El porcentaje total de los PDFs (${totalPdfPct}%) excede el 100%.`);
-              
               setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
               if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
           };
 
           const handleDelete = async (id, sub) => { 
               if (confirm("¿Borrar materia y todos sus documentos anexos?")) { 
-                  if(sub.files) {
-                      for(const f of sub.files) await deleteFromDB(f.id);
-                  }
+                  if(sub.files) for(const f of sub.files) await deleteFromDB(f.id);
                   await deleteFromDB(id); 
                   setSubjects(prev => prev.filter(s => s.id !== id)); 
                   if (activeSubjectId === id) setActiveSubjectId(null); 
@@ -406,40 +335,22 @@
               const file = e.target.files[0];
               if (!file) return;
               if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
-
-              setPdfProcessing(true);
-              setPdfProgress(0);
-
+              setPdfProcessing(true); setPdfProgress(0);
               try {
                   const arrayBuffer = await file.arrayBuffer();
                   const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
                   let fullText = "";
-                  
                   for (let i = 1; i <= pdf.numPages; i++) {
                       const page = await pdf.getPage(i);
                       const textContent = await page.getTextContent();
-                      const pageText = textContent.items.map(item => item.str).join(' ');
-                      fullText += pageText + "\n";
+                      fullText += textContent.items.map(item => item.str).join(' ') + "\n";
                       setPdfProgress(Math.round((i / pdf.numPages) * 100));
                   }
-
                   const fileId = `${editForm.id}_${Date.now()}`;
                   await saveToDB(fileId, fullText);
-                  
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                  const remaining = Math.max(0, 100 - currentTotal);
-                  
-                  setEditForm(prev => ({
-                      ...prev,
-                      files: [...prev.files, { id: fileId, name: file.name, pct: remaining }] 
-                  }));
-
-              } catch (err) {
-                  console.error(err);
-                  alert("Error al leer el PDF.");
-              } finally {
-                  setPdfProcessing(false);
-              }
+                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal) }] }));
+              } catch (err) { alert("Error al leer el PDF."); } finally { setPdfProcessing(false); }
           };
 
           const handleDeleteFile = async (idx) => {
@@ -449,15 +360,64 @@
               setEditForm({...editForm, files: newFiles});
           };
 
-          const handleFilePctChange = (idx, val) => {
-              const newFiles = [...editForm.files];
-              newFiles[idx].pct = parseFloat(val) || 0;
-              setEditForm({...editForm, files: newFiles});
+         
+          const handleSearchDescription = async () => {
+              const apiKey = window.localStorage.getItem('gemini_api_key');
+              if(!apiKey) return alert("Configura la API Key primero");
+              if(!editForm.name && !editForm.type) return alert("Escribe algo en nombre o descripción para buscar");
+              
+              setSearchingDesc(true);
+              const query = editForm.type || editForm.name;
+              
+              // Prompt actualizado para pedir metadatos técnicos
+              const prompt = `Actúa como experto en Oposiciones y Másters de España. Busca hasta 5 coincidencias oficiales para: "${query}". 
+              Para cada una, intenta obtener los datos técnicos del primer ejercicio o test. 
+              Devuelve ÚNICAMENTE un JSON array de objetos con este formato exacto: 
+              [{"label": "Nombre Oficial Oposición/Máster", "q": nº_preguntas_entero, "t": tiempo_minutos_entero, "c": nota_corte_pct_entero, "o": num_opciones_entero}]. 
+              Si desconoces algún dato específico de la prueba, usa OBLIGATORIAMENTE estos valores por defecto para ese campo: q=200, t=270, c=90, o=4.`;
+              
+              try {
+                  const res = await askGemini(JSON.parse(apiKey), prompt);
+                  const list = extractJSON(res);
+                  
+                  if(Array.isArray(list) && list.length > 0) {
+                      // Validamos que los objetos tengan estructura mínima para evitar errores
+                      const safeList = list.map(item => ({
+                          label: item.label || "Desconocido",
+                          q: parseInt(item.q) || 200,
+                          t: parseInt(item.t) || 270,
+                          c: parseInt(item.c) || 90,
+                          o: parseInt(item.o) || 4
+                      }));
+                      setDescResults(safeList);
+                  } else {
+                      alert("No se encontraron resultados con el formato esperado.");
+                  }
+              } catch(e) { 
+                  alert("Error al buscar: " + e.message); 
+              } finally { 
+                  setSearchingDesc(false); 
+              }
+          };
+
+          const handleMagicWand = async () => {
+              const apiKey = window.localStorage.getItem('gemini_api_key');
+              if(!apiKey) return alert("Configura la API Key primero");
+              if(!editForm.type) return alert("Rellena la descripción de la materia primero.");
+              setGeneratingTopics(true);
+              const prompt = `Genera el temario oficial (o estimado si no es público) para la oposición/máster: "${editForm.type}". Devuelve un JSON array de objetos con formato: [{"name": "Título del tema", "pct": numero_entero}]. Distribuye los porcentajes ("pct") según la relevancia habitual en exámenes, sumando 100% en total. Si no sabes los pesos exactos, distribuye equitativamente. Máximo 20 temas.`;
+              try {
+                  const res = await askGemini(JSON.parse(apiKey), prompt);
+                  const list = extractJSON(res);
+                  if(Array.isArray(list) && list.length > 0) { setEditForm(prev => ({ ...prev, topics: list })); } 
+                  else alert("No se pudo generar el temario.");
+              } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
           };
 
           if (isEditing) {
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               const internetPct = Math.max(0, 100 - totalPdfPct);
+              const topicsTotal = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
 
               return (
                   <div className="h-full flex flex-col p-4 overflow-y-auto">
@@ -466,8 +426,42 @@
                           
                           <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Nombre</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Descripción</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} /></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Nombre Corto</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
+                                  <div className="relative">
+                                      <label className="text-xs text-slate-400 block mb-1">Descripción / Oposición oficial</label>
+                                      <div className="flex gap-2">
+                                          <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} placeholder="Ej: Auxiliar Administrativo Estado" />
+                                          <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
+                                      </div>
+
+                                      {descResults.length > 0 && (
+                                          <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
+                                              <div className="flex justify-between p-2 bg-slate-900/50">
+                                                  <span className="text-xs text-slate-400">Selecciona para autocompletar:</span>
+                                                  <button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button>
+                                              </div>
+                                              {descResults.map((r, i) => (
+                                                  <button key={i} onClick={() => {
+                                                      setEditForm({
+                                                          ...editForm, 
+                                                          type: r.label,
+                                                          qCount: r.q,
+                                                          timeMinutes: r.t,
+                                                          cutOffPct: r.c,
+                                                          optionsCount: r.o
+                                                      }); 
+                                                      setDescResults([]);
+                                                  }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0 group">
+                                                      <div className="font-bold">{r.label}</div>
+                                                      <div className="text-[10px] text-slate-500 group-hover:text-blue-200">
+                                                          {r.q} Preus. | {r.t} Min. | Corte {r.c}% | {r.o} Opc.
+                                                      </div>
+                                                  </button>
+                                              ))}
+                                          </div>
+                                      )}
+
+                                  </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Preguntas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} /></div>
@@ -485,10 +479,8 @@
                                       <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
                                   </label>
                               </div>
-
                               <div className="space-y-2 mb-4">
                                   {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos. Todo el examen se basará en Internet.</div>}
-                                  
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
                                           <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
@@ -498,14 +490,13 @@
                                           </div>
                                           <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
                                               <span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span>
-                                              <input type="number" value={file.pct} onChange={e => handleFilePctChange(idx, e.target.value)} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
+                                              <input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
                                               <span className="text-xs font-bold text-slate-500 pr-1">%</span>
                                           </div>
                                           <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Icons.Trash2 size={16}/></button>
                                       </div>
                                   ))}
                               </div>
-
                               <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
                                   <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
                                   <div className="flex items-center gap-4 text-xs font-mono">
@@ -519,7 +510,12 @@
                           <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
                               <div className="flex justify-between items-center mb-4">
                                   <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
-                                  <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
+                                  <div className="flex gap-2">
+                                      <button onClick={handleMagicWand} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">
+                                          {generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto
+                                      </button>
+                                      <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
+                                  </div>
                               </div>
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
@@ -531,6 +527,11 @@
                                       <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button>
                                   </div>
                               ))}
+                              {internetPct > 0 && (
+                                  <div className="text-right mt-2 text-xs font-bold border-t border-slate-700 pt-2">
+                                      Suma de pesos: <span className={Math.abs(topicsTotal - 100) < 1 ? "text-green-400" : "text-yellow-500"}>{topicsTotal}%</span>
+                                  </div>
+                              )}
                           </div>
 
                           <div className="glass-panel p-6 rounded-xl">
@@ -575,23 +576,15 @@
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
-          
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
-
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
           useEffect(() => {
               let timer;
               if (status === 'active' && timeLeft > 0) {
-                  timer = setInterval(() => {
-                      if (!isFetchingRef.current) {
-                           updateState({ timeLeft: timeLeft - 1 });
-                      }
-                  }, 1000);
-              } else if (timeLeft === 0 && status === 'active') {
-                  executeFinish();
-              }
+                  timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000);
+              } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
@@ -615,11 +608,7 @@
               let queue = [];
               plan.forEach(source => {
                   let remain = source.count;
-                  while(remain > 0) {
-                      const amount = Math.min(remain, 5);
-                      queue.push({ ...source, amount: amount });
-                      remain -= amount;
-                  }
+                  while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; }
               });
               return queue;
           };
@@ -630,88 +619,44 @@
               const nextBatch = batchQueue[0]; 
               try {
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '' };
-                  if (nextBatch.type === 'pdf') {
-                      sourceConfig.content = await getFromDB(nextBatch.id);
-                  }
+                  if (nextBatch.type === 'pdf') { sourceConfig.content = await getFromDB(nextBatch.id); }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
-                  if (uniqueNewQs.length > 0) {
-                      updateState({ 
-                          questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))],
-                          batchQueue: batchQueue.slice(1)
-                      });
-                  } else {
-                      updateState({ batchQueue: batchQueue.slice(1) });
-                  }
-              } catch (e) { 
-                  console.log(e);
-                  updateState({ batchQueue: batchQueue.slice(1) });
-              } finally { 
-                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
-              }
+                  if (uniqueNewQs.length > 0) { updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
+                  else { updateState({ batchQueue: batchQueue.slice(1) }); }
+              } catch (e) { console.log(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const startExam = async () => {
               if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
               const queue = generateBatchPlan();
               updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
-              
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  
-                  updateState({
-                      questions: initialQs.map((q, i) => ({ ...q, id: i })),
-                      batchQueue: queue.slice(1),
-                      status: 'active',
-                      timeLeft: activeSubject.timeMinutes * 60,
-                      currentIndex: 0,
-                      answers: {}
-                  });
-              } catch (e) { 
-                  updateState({ error: e.message, status: 'idle' }); 
-              } finally { 
-                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
-              }
+                  updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
+              } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const handleAnswer = (optionIdx) => {
               updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
               if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
-              
-              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) {
-                  setTimeout(() => setShowFinishConfirm(true), 500);
-              }
+              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) { setTimeout(() => setShowFinishConfirm(true), 500); }
           };
 
           const executeFinish = () => {
               setShowFinishConfirm(false);
               const finalStats = calculateStats();
-              onSaveResult({ 
-                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                  score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, 
-                  misses: finalStats.misses, skips: finalStats.skips, total: questions.length 
-              });
+              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, misses: finalStats.misses, skips: finalStats.skips, total: questions.length });
               updateState({ status: 'finished' });
           };
 
           const executeRestart = () => {
               setShowRestartConfirm(false);
-              setSession({
-                  status: 'idle',
-                  questions: [],
-                  answers: {},
-                  currentIndex: 0,
-                  timeLeft: 0,
-                  autoNext: false,
-                  showGrid: false,
-                  batchQueue: [],
-                  loadingMsg: '',
-                  error: null
-              });
+              setSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
           };
 
           const calculateStats = () => {
@@ -734,11 +679,7 @@
                           <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                           <p className="text-slate-400 mb-8">{activeSubject.type}</p>
                           <div className="flex justify-center gap-4 mb-8">
-                               {activeSubject.files?.length > 0 ? (
-                                   <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>
-                               ) : (
-                                   <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg text-sm text-slate-400 flex items-center gap-2"><Icons.Globe size={18}/> Solo Internet</div>
-                               )}
+                               {activeSubject.files?.length > 0 ? <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div> : <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg text-sm text-slate-400 flex items-center gap-2"><Icons.Globe size={18}/> Solo Internet</div>}
                           </div>
                           {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm animate-pulse-error">{error}</div>}
                           <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
@@ -758,14 +699,25 @@
           const paceSeconds = (currentIndex * avgTimePerQuestion) - actualTimeSpent;
           const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(Math.abs(paceSeconds)/60).toString().padStart(2,'0')}:${(Math.abs(paceSeconds)%60).toString().padStart(2,'0')}`;
           
+          const answeredCount = Object.keys(answers).length;
+          const progressPct = ((answeredCount / activeSubject.qCount) * 100).toFixed(1);
+
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
                   <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
                       <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-3">
-                              <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
-                              <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
-                              <div className="hidden sm:block leading-tight"><div className="text-xs text-slate-400 font-bold uppercase truncate max-w-[150px]">{activeSubject.name}</div><div className="text-xs text-slate-500">P. {currentIndex + 1} / {activeSubject.qCount}</div></div>
+                          <div className="flex items-center gap-8">
+                              <div className="flex items-center gap-3">
+                                  <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
+                                  <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
+                              </div>
+                              <div className="w-px h-8 bg-slate-700"></div>
+                              <div className="hidden sm:block leading-tight">
+                                  <div className="text-xl font-bold text-white leading-none">
+                                      {currentIndex + 1} <span className="text-slate-500 text-lg">/ {activeSubject.qCount}</span> 
+                                      <span className="text-sm font-mono text-blue-400 font-normal ml-2">[{progressPct}%]</span>
+                                  </div>
+                              </div>
                           </div>
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
@@ -863,9 +815,7 @@
                               if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500";
                               else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
                               else bg = "bg-red-900/60 text-red-400 border-red-500";
-                          } else if (i >= questions.length) {
-                              bg = "opacity-30 border-dashed border-slate-800";
-                          }
+                          } else if (i >= questions.length) { bg = "opacity-30 border-dashed border-slate-800"; }
                           return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
                       })}
                   </div></div></div>}
@@ -879,25 +829,59 @@
               const total = results.length;
               const avgScore = results.reduce((acc, r) => acc + (r.score || 0), 0) / total;
               const avgPct = results.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
-              return { total, avgScore, avgPct };
+              const avgProgress = results.reduce((acc, r) => acc + ((r.hits+r.misses+r.skips)/r.total)*100, 0) / total;
+              const avgHits = results.reduce((acc, r) => acc + r.hits, 0) / total;
+              const avgMisses = results.reduce((acc, r) => acc + r.misses, 0) / total;
+              const avgSkips = results.reduce((acc, r) => acc + r.skips, 0) / total;
+              return { total, avgScore, avgPct, avgProgress, avgHits, avgMisses, avgSkips };
           }, [results]);
 
           return (
               <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
                   <div className="flex justify-between items-center mb-6 shrink-0"><h3 className="text-2xl font-display font-bold text-white">Historial</h3><button onClick={onClear} className="text-red-400 hover:text-red-300 flex items-center gap-2 text-sm font-bold"><Icons.Trash2 size={16}/> Limpiar Todo</button></div>
                   {stats && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 shrink-0">
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold text-white">{stats.total}</div><div className="text-xs text-slate-400 uppercase">Exámenes</div></div></div>
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-white">{stats.avgScore.toFixed(1)}</div><div className="text-xs text-slate-400 uppercase">Puntuación Media</div></div></div>
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold text-white">{stats.avgPct.toFixed(1)}%</div><div className="text-xs text-slate-400 uppercase">% Acierto Medio</div></div></div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
+                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Exámenes</div><div className="text-xl font-bold text-white">{stats.total}</div></div>
+                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Nota Media</div><div className="text-xl font-bold text-blue-400">{stats.avgScore.toFixed(1)}</div></div>
+                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Acierto</div><div className="text-xl font-bold text-green-400">{stats.avgPct.toFixed(1)}%</div></div>
+                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Progreso</div><div className="text-xl font-bold text-yellow-400">{stats.avgProgress.toFixed(1)}%</div></div>
+                          <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-3 gap-2">
+                              <div className="text-center"><div className="text-[10px] text-green-500 uppercase">Media Aciertos</div><div className="text-lg font-bold text-white">{stats.avgHits.toFixed(1)}</div></div>
+                              <div className="text-center border-l border-slate-700"><div className="text-[10px] text-red-500 uppercase">Media Fallos</div><div className="text-lg font-bold text-white">{stats.avgMisses.toFixed(1)}</div></div>
+                              <div className="text-center border-l border-slate-700"><div className="text-[10px] text-blue-500 uppercase">Media Omisiones</div><div className="text-lg font-bold text-white">{stats.avgSkips.toFixed(1)}</div></div>
+                          </div>
                       </div>
                   )}
                   <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex-1 relative">
                       <div className="absolute inset-0 overflow-y-auto">
                           <table className="w-full text-left">
-                              <thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">Nota %</th><th className="p-4 text-right">Detalle (A/F/O)</th><th className="p-4 text-right">Acción</th></tr></thead>
+                              <thead className="bg-slate-800 text-slate-400 text-xs uppercase sticky top-0 z-10">
+                                  <tr>
+                                      <th className="p-4">Fecha</th>
+                                      <th className="p-4">Materia</th>
+                                      <th className="p-4 text-center">Puntos</th>
+                                      <th className="p-4 text-center">Nota %</th>
+                                      <th className="p-4 text-center">Progreso</th>
+                                      <th className="p-4 text-right">Detalle (A/F/O)</th>
+                                      <th className="p-4 text-right">Acción</th>
+                                  </tr>
+                              </thead>
                               <tbody className="divide-y divide-slate-800 text-slate-300">
-                                  {results.map((r, i) => (<tr key={i} className="hover:bg-slate-800/30"><td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td><td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td><td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td><td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td><td className="p-4 text-right text-xs font-mono"><span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span></td><td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50 transition-colors"><Icons.Trash2 size={16}/></button></td></tr>))}
+                                  {results.map((r, i) => {
+                                      const answeredTotal = r.hits + r.misses + r.skips;
+                                      const progressPct = ((answeredTotal / r.total) * 100).toFixed(1);
+                                      return (
+                                          <tr key={i} className="hover:bg-slate-800/30">
+                                              <td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td>
+                                              <td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td>
+                                              <td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td>
+                                              <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td>
+                                              <td className="p-4 text-center text-xs text-slate-400">{answeredTotal} / {r.total} <span className="font-bold text-white">({progressPct}%)</span></td>
+                                              <td className="p-4 text-right text-xs font-mono"><span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span></td>
+                                              <td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50 transition-colors"><Icons.Trash2 size={16}/></button></td>
+                                          </tr>
+                                      )
+                                  })}
                               </tbody>
                           </table>
                       </div>
@@ -939,32 +923,23 @@
           
           const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); 
           const [tc, setTc] = usePersistentState('bg_app_tc_st', 0); 
+          const [isRegistered, setIsRegistered] = usePersistentState('bg_is_registered', false);
+
           const [modal, setModal] = useState({ open: false, title: '', message: '', type: '' });
 
-          const [examSession, setExamSession] = useState({
-              status: 'idle',
-              questions: [],
-              answers: {},
-              currentIndex: 0,
-              timeLeft: 0,
-              autoNext: false,
-              showGrid: false,
-              batchQueue: [],
-              loadingMsg: '',
-              error: null
-          });
+          const [examSession, setExamSession] = useState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
 
-          const isAuth = _bg_check_sys(rk);
+          const isAuth = isRegistered || _bg_check_sys(rk);
           const trialExhausted = tc >= 4;
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
 
           const handleActivate = (code) => {
               if(!code) return;
               if(_bg_check_sys(code)) {
-                  setRk(code);
+                  setRk(code); setIsRegistered(true); 
                   setModal({ open: true, title: 'ACTIVACIÓN ÉXITO', message: 'Sistema registrado correctamente. Acceso ilimitado habilitado.', type: 'success' });
               } else {
-                  setRk('');
+                  setRk(''); setIsRegistered(false); setTc(0);
                   setModal({ open: true, title: 'ERROR', message: 'El código introducido no es válido para esta estación.', type: 'error' });
               }
           };
@@ -990,9 +965,7 @@
                                   <div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl">
                                       <div className="inline-flex p-4 bg-red-500/10 text-red-500 rounded-full mb-6"><Icons.AlertTriangle size={48} /></div>
                                       <h2 className="text-2xl font-display font-bold text-white mb-4 uppercase">PRUEBA FINALIZADA</h2>
-                                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-                                          Has completado tus 4 sesiones de cortesía. BoardingGate se sustenta mediante <strong>crowdfunding</strong> y aportaciones directas.
-                                      </p>
+                                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">Has completado tus 4 sesiones de cortesía. BoardingGate se sustenta mediante <strong>crowdfunding</strong> y aportaciones directas.</p>
                                       <div className="bg-black/50 p-4 rounded-xl mb-6 border border-slate-800">
                                           <p className="text-xs text-slate-300">Solicita tu Nº de Registro por privado en:</p>
                                           <a href="https://x.com/BoardingGate" target="_blank" className="text-blue-400 font-bold hover:underline mt-1 block tracking-wide">@BoardingGate en X (Twitter)</a>
@@ -1001,16 +974,10 @@
                                   </div>
                               </div>
                           ) : (
-                              <ExamTab 
-                                  activeSubject={activeSubject} 
-                                  session={examSession}
-                                  setSession={setExamSession}
+                              <ExamTab activeSubject={activeSubject} session={examSession} setSession={setExamSession}
                                   onSaveResult={(r)=>{
-                                      if(!isAuth && (r.hits + r.misses) > (r.total / 2)) {
-                                          setTc(prev => prev + 1);
-                                      }
-                                      setHistory(prev=>[r,...prev]); 
-                                      setActiveTab('history');
+                                      if(!isAuth && (r.hits + r.misses) > (r.total / 2)) { setTc(prev => prev + 1); }
+                                      setHistory(prev=>[r,...prev]); setActiveTab('history');
                                       setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
                                   }} 
                               />
@@ -1022,13 +989,7 @@
                       {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
                   </main>
 
-                  <Modal 
-                      isOpen={modal.open} 
-                      title={modal.title} 
-                      message={modal.message} 
-                      type={modal.type} 
-                      onClose={() => setModal({ ...modal, open: false })} 
-                  />
+                  <Modal isOpen={modal.open} title={modal.title} message={modal.message} type={modal.type} onClose={() => setModal({ ...modal, open: false })} />
               </div>
           );
       };

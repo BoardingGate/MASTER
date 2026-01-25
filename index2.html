@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -53,7 +52,6 @@
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -66,7 +64,7 @@
         AlertTriangle: (p) => <IconBase {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>,
         CheckCircle: (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconBase>,
         XCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></IconBase>,
-        Settings: (p) => <IconBase {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65(1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>,
+        Settings: (p) => <IconBase {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>,
         BookOpen: (p) => <IconBase {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconBase>,
         BarChart3: (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></IconBase>,
         Play: (p) => <IconBase {...p}><polygon points="5 3 19 12 5 21 5 3"/></IconBase>,
@@ -83,33 +81,19 @@
         HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>,
         Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>,
         Wand: (p) => <IconBase {...p}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2L11 5"/></IconBase>,
-        Users: (p) => <IconBase {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>,
-        Link: (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></IconBase>,
         Calendar: (p) => <IconBase {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></IconBase>
       };
 
-      // --- BASE DE DATOS (PDFs) ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const openDB = () => {
           return new Promise((resolve, reject) => {
               const request = indexedDB.open(DB_NAME, 2); 
               request.onupgradeneeded = (e) => { 
-                  if (!e.target.result.objectStoreNames.contains(DB_STORE)) {
-                      e.target.result.createObjectStore(DB_STORE); 
-                  }
+                  if (!e.target.result.objectStoreNames.contains(DB_STORE)) { e.target.result.createObjectStore(DB_STORE); }
               };
               request.onsuccess = (e) => resolve(e.target.result);
               request.onerror = (e) => reject(e);
-          });
-      };
-      const getFromDB = async (fileId) => {
-          const db = await openDB();
-          return new Promise((resolve, reject) => {
-              const tx = db.transaction(DB_STORE, 'readonly');
-              const req = tx.objectStore(DB_STORE).get(fileId);
-              req.onsuccess = () => resolve(req.result);
-              req.onerror = () => reject();
           });
       };
       const saveToDB = async (fileId, text) => {
@@ -119,6 +103,15 @@
               tx.objectStore(DB_STORE).put(text, fileId);
               tx.oncomplete = () => resolve();
               tx.onerror = () => reject();
+          });
+      };
+      const getFromDB = async (fileId) => {
+          const db = await openDB();
+          return new Promise((resolve, reject) => {
+              const tx = db.transaction(DB_STORE, 'readonly');
+              const req = tx.objectStore(DB_STORE).get(fileId);
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => reject();
           });
       };
       const deleteFromDB = async (fileId) => {
@@ -152,7 +145,7 @@
               { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
           ];
-          const searchEnhancedPrompt = `[INSTRUCCIÓN DE BÚSQUEDA EN TIEMPO REAL ACTIVA]: Utiliza internet para responder con datos oficiales y actualizados de 2024/2025:\n${prompt}`;
+          const searchEnhancedPrompt = `[BÚSQUEDA EN TIEMPO REAL ACTIVA]: Responde con datos oficiales y actualizados de 2024/2025:\n${prompt}`;
           try {
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
                   method: 'POST',
@@ -183,11 +176,11 @@
           if (sourceConfig.type === 'pdf') {
               contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${sourceConfig.content.substring(0, 950000)} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
           } else if (sourceConfig.type === 'official') {
-              contextInstruction = `CONTEXTO: EXAMEN OFICIAL (AÑO/CONVOCATORIA: ${sourceConfig.name}). URL REF: ${sourceConfig.url || 'No disponible'}. INSTRUCCIÓN CRÍTICA: Debes intentar rescatar preguntas REALES que aparecieron en este examen oficial o simulacros muy fieles.`;
+              contextInstruction = `CONTEXTO: EXAMEN OFICIAL (AÑO: ${sourceConfig.name}). URL REF: ${sourceConfig.url || 'N/D'}. INSTRUCCIÓN: Rescata preguntas reales de ese examen oficial.`;
           } else {
-              contextInstruction = `Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa tu conocimiento general actualizado para generar preguntas sobre estos temas.`;
+              contextInstruction = `Temas (Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa conocimiento de 2025.`;
           }
-          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
+          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). JSON: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título"}]`;
           const rawText = await askGemini(apiKey, prompt);
           const parsed = extractJSON(rawText);
           return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : sourceConfig.type === 'official' ? `[OFICIAL]` : `[Internet]` }));
@@ -200,33 +193,93 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      // --- COMPONENTES PRINCIPALES ---
+      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+          const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
+          const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-pro-preview');
+          const [showKey, setShowKey] = useState(false);
+          const [testStatus, setTestStatus] = useState(null); 
+          const [errorDetail, setErrorDetail] = useState('');
+          const [localLic, setLocalLic] = useState('');
+
+          const testConnection = async () => {
+              if(!apiKey) return alert("Introduce una clave primero.");
+              setTestStatus('loading');
+              try {
+                  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ contents: [{ parts: [{ text: "TEST" }] }] })
+                  });
+                  if(response.ok) setTestStatus('success'); 
+                  else { const err = await response.json(); setTestStatus('error'); setErrorDetail(err.error?.message || "Error desconocido"); }
+              } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
+          };
+
+          return (
+              <div className="h-full p-6 flex flex-col items-center justify-start fade-in overflow-y-auto">
+                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
+                      <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-700">
+                          <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
+                          <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Gemini 3 Pro activo</p></div>
+                      </div>
+                      <div className="space-y-6">
+                          <div>
+                              <label className="block text-sm font-bold text-slate-300 mb-2">API Key</label>
+                              <div className="relative mb-4">
+                                  <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black/50 border border-slate-600 rounded-xl p-4 text-white focus:outline-none font-mono"/>
+                                  <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">{showKey ? <Icons.EyeOff size={20}/> : <Icons.Eye size={20}/>}</button>
+                              </div>
+                              <div className="flex gap-4">
+                                  <select value={model} onChange={(e) => setModel(e.target.value)} className="flex-1 bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm">
+                                      <option value="gemini-3-pro-preview">Gemini 3 Pro (Recomendado)</option>
+                                      <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                  </select>
+                                  <button onClick={testConnection} className="bg-slate-700 px-6 rounded-xl font-bold text-sm">PROBAR</button>
+                              </div>
+                          </div>
+                          <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+                              <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
+                              <ol className="text-sm text-slate-300 space-y-3 list-decimal pl-4 mb-4">
+                                  <li>Accede a <strong>Google AI Studio</strong> (botón abajo).</li>
+                                  <li>Haz clic en <strong>"Get API key"</strong>.</li>
+                                  <li>Copia la clave y pégala arriba.</li>
+                              </ol>
+                              <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold shadow-lg">Ir a Google AI Studio</a>
+                          </div>
+                      </div>
+                  </div>
+                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 mb-20 shadow-2xl">
+                      <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-700">
+                          <div className={`p-3 rounded-xl ${isAuth ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.CheckCircle size={32} /></div>
+                          <h2 className="text-2xl font-bold">Registro</h2>
+                      </div>
+                      <div className="space-y-6">
+                          <div className="bg-black/30 border border-slate-700 rounded-xl p-5">
+                              <div className="flex gap-3">
+                                  <input type="text" value={localLic} onChange={(e) => setLocalLic(e.target.value.toUpperCase())} placeholder="BG-XXXX-XXXX" className="flex-1 bg-slate-900 border border-slate-600 rounded-lg p-3 text-white font-mono focus:outline-none" />
+                                  <button onClick={() => onActivate(localLic)} className="px-6 py-2 bg-blue-600 rounded-lg font-bold">ACTIVAR</button>
+                              </div>
+                              {isAuth && <div className="mt-3 text-green-400 text-xs font-bold uppercase">● Dispositivo Registrado</div>}
+                          </div>
+                          {!isAuth && <div className="text-sm text-blue-200">Simulacros de cortesía: <span className="font-bold">{trialCount} de 10</span></div>}
+                      </div>
+                  </div>
+              </div>
+          );
+      };
 
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
           const [pdfProcessing, setPdfProcessing] = useState(false);
-          const [pdfProgress, setPdfProgress] = useState(0);
           const [searchingDesc, setSearchingDesc] = useState(false);
           const [descResults, setDescResults] = useState([]);
           const [generatingTopics, setGeneratingTopics] = useState(false);
           const [searchingLastCall, setSearchingLastCall] = useState(false);
-          const [viewingPdfText, setViewingPdfText] = useState(null);
+          const [viewingFile, setViewingFile] = useState(null);
           
-          const defaultSubject = { 
-              id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
-              pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, 
-              topics: [{ name: 'Temario General', pct: 100 }], files: [],
-              lastCall: { date: '', url: '', seats: '', cutOff: '', examUrl: '', useExam: false, examPct: 0 } 
-          };
-
-          const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
-          const handleEdit = (sub) => { 
-              const safeSub = { ...defaultSubject, ...sub, files: sub.files || [], 
-              lastCall: { ...defaultSubject.lastCall, ...(sub.lastCall || {}) } }; 
-              setEditForm(safeSub); setIsEditing(true); 
-          };
-
+          const handleNew = () => { setEditForm({ id: Date.now(), name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, topics: [{ name: 'Temario General', pct: 100 }], files: [], lastCall: { date: '', url: '', seats: '', cutOff: '', examUrl: '', useExam: false, examPct: 0 } }); setIsEditing(true); };
+          const handleEdit = (sub) => { setEditForm({ ...sub, lastCall: sub.lastCall || {} }); setIsEditing(true); };
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
@@ -236,201 +289,115 @@
               if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
           };
 
-          const handleDelete = async (id, sub) => { 
-              if (confirm("¿Borrar materia y todos sus documentos anexos?")) { 
-                  if(sub.files) for(const f of sub.files) await deleteFromDB(f.id);
-                  await deleteFromDB(id); 
-                  setSubjects(prev => prev.filter(s => s.id !== id)); 
-                  if (activeSubjectId === id) setActiveSubjectId(null); 
-              }
-          };
-
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
-              if (!file) return;
-              setPdfProcessing(true); setPdfProgress(0);
+              if (!file || file.type !== 'application/pdf') return;
+              setPdfProcessing(true);
               try {
-                  const arrayBuffer = await file.arrayBuffer();
-                  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                  const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
                   let fullText = "";
-                  for (let i = 1; i <= pdf.numPages; i++) {
-                      const page = await pdf.getPage(i);
-                      const textContent = await page.getTextContent();
-                      fullText += textContent.items.map(item => item.str).join(' ') + "\n";
-                      setPdfProgress(Math.round((i / pdf.numPages) * 100));
-                  }
+                  for (let i = 1; i <= pdf.numPages; i++) { fullText += (await (await pdf.getPage(i)).getTextContent()).items.map(item => item.str).join(' ') + "\n"; }
                   const fileId = `${editForm.id}_${Date.now()}`;
                   await saveToDB(fileId, fullText);
-                  const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal) }] }));
+                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: 0 }] }));
               } catch (err) { alert("Error al leer el PDF."); } finally { setPdfProcessing(false); }
           };
 
-          const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
-          
-          const handleViewPdf = async (fileId) => {
-              const text = await getFromDB(fileId);
-              setViewingPdfText(text);
-          };
-
-          const handleSearchDescription = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              setSearchingDesc(true);
-              const query = editForm.type || editForm.name;
-              const prompt = `Actúa como buscador experto. Lista 5 coincidencias oficiales en España para: "${query}". Devuelve JSON: [{"label": "Nombre Oficial", "q": numero, "t": minutos, "c": corte_pct, "o": opciones}]. Default: q=200, t=270, c=90, o=4.`;
-              try {
-                  const res = await askGemini(JSON.parse(apiKey), prompt);
-                  const list = extractJSON(res);
-                  if(Array.isArray(list)) setDescResults(list);
-              } catch(e) { console.error(e); } finally { setSearchingDesc(false); }
-          };
-
-          const handleMagicWand = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              setGeneratingTopics(true);
-              const prompt = `Genera el temario oficial actual de: "${editForm.type}". Devuelve JSON array: [{"name": "Tema X", "pct": numero}]. Total 100%. Máximo 20 temas.`;
-              try {
-                  const res = await askGemini(JSON.parse(apiKey), prompt);
-                  const list = extractJSON(res);
-                  if(Array.isArray(list)) { setEditForm(prev => ({ ...prev, topics: list })); } 
-              } catch(e) { console.error(e); } finally { setGeneratingTopics(false); }
-          };
-
-          const handleSearchLastCall = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              setSearchingLastCall(true);
-              const prompt = `Busca datos oficiales sobre la última convocatoria de: "${editForm.type}". La 'Nota de Corte' es el umbral para aprobar, devuélvelo como puntos o porcentaje según se publique oficialmente. Devuelve JSON: {"date": "YYYY-MM-DD", "url": "web_organismo", "seats": "numero_plazas", "cutOff": "valor_real", "examUrl": "url_pdf_examen"}.`;
-              try {
-                  const res = await askGemini(JSON.parse(apiKey), prompt);
-                  let data = extractJSON(res);
-                  if (Array.isArray(data)) data = data[0]; 
-                  if(data) setEditForm(prev => ({ ...prev, lastCall: { ...prev.lastCall, ...data } }));
-              } catch(e) { console.error(e); } finally { setSearchingLastCall(false); }
+          const openFileViewer = async (file) => {
+              const text = await getFromDB(file.id);
+              setViewingFile({ name: file.name, content: text });
           };
 
           if (isEditing) {
-              const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
-              const officialPct = editForm.lastCall.useExam ? (parseFloat(editForm.lastCall.examPct) || 0) : 0;
-              const internetPct = Math.max(0, 100 - totalPdfPct - officialPct);
               const topicsTotal = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
-
               return (
                   <div className="h-full flex flex-col p-4 overflow-y-auto">
                       <div className="max-w-4xl mx-auto w-full pb-20">
-                          <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> {editForm.name ? 'Editar' : 'Nueva'} Materia</h3>
-                          
+                          <h3 className="text-xl font-bold mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings className="text-blue-500"/> Configurar Materia</h3>
                           <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Nombre Corto</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
-                                  <div className="relative">
-                                      <label className="text-xs text-slate-400 block mb-1">Descripción / Oposición oficial</label>
-                                      <div className="flex gap-2">
-                                          <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} />
-                                          <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
-                                      </div>
-                                      {descResults.length > 0 && (
-                                          <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
-                                              {descResults.map((r, i) => (
-                                                  <button key={i} onClick={() => { setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o }); setDescResults([]); }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0 group">
-                                                      <div className="font-bold">{r.label}</div>
-                                                      <div className="text-[10px] text-slate-500">{r.q} Pregs. | {r.t} Min. | Corte {r.c}%</div>
-                                                  </button>
-                                              ))}
-                                          </div>
-                                      )}
+                                  <input type="text" placeholder="Nombre Corto" className="bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                                  <div className="flex gap-2">
+                                      <input type="text" placeholder="Descripción / Oposición" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} />
+                                      <button onClick={async () => {
+                                          const apiKey = window.localStorage.getItem('gemini_api_key');
+                                          if(!apiKey) return; setSearchingDesc(true);
+                                          const res = await askGemini(JSON.parse(apiKey), `Buscador: "${editForm.type}". JSON: [{"label": "Nombre", "q": 100, "t": 90, "c": 70, "o": 4}]`);
+                                          setDescResults(extractJSON(res) || []); setSearchingDesc(false);
+                                      }} className="bg-blue-600 px-3 rounded">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
                                   </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Preguntas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Corte %</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Minutos</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.timeMinutes} onChange={e => setEditForm({...editForm, timeMinutes: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
+                                  <input type="number" placeholder="Preguntas" className="bg-slate-900 border border-slate-600 rounded p-2 text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} />
+                                  <input type="number" placeholder="Corte %" className="bg-slate-900 border border-slate-600 rounded p-2 text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} />
+                                  <input type="number" placeholder="Minutos" className="bg-slate-900 border border-slate-600 rounded p-2 text-right" value={editForm.timeMinutes} onChange={e => setEditForm({...editForm, timeMinutes: parseInt(e.target.value)})} />
+                                  <input type="number" placeholder="Opciones" className="bg-slate-900 border border-slate-600 rounded p-2 text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} />
                               </div>
                           </div>
 
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
+                          <div className="glass-panel p-6 rounded-xl mb-6">
                               <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentos PDF Anexos</h4>
-                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
-                                      <Icons.Upload size={14}/> {pdfProcessing ? `Cargando...` : "Añadir PDF"}
-                                      <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
+                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentos Anexos (PDF)</h4>
+                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2">
+                                      <Icons.Upload size={14}/> {pdfProcessing ? 'Leyendo...' : 'Añadir PDF'}
+                                      <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
                                   </label>
                               </div>
                               {editForm.files.map((file, idx) => (
                                   <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 mb-2">
-                                      <div className="flex-1 min-w-0 font-bold truncate text-white text-sm">{file.name}</div>
-                                      <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600">
-                                          <input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
-                                          <span className="text-xs font-bold text-slate-500 pr-1">%</span>
+                                      <div className="flex-1 truncate font-bold text-sm">{file.name}</div>
+                                      <button onClick={() => openFileViewer(file)} className="text-blue-400 hover:text-blue-300 p-2"><Icons.Eye size={16}/></button>
+                                      <div className="bg-slate-900 border border-slate-600 rounded flex items-center px-2">
+                                          <input type="number" value={file.pct} onChange={e => {const f=[...editForm.files]; f[idx].pct=parseFloat(e.target.value); setEditForm({...editForm, files:f});}} className="w-10 bg-transparent text-right text-sm" />
+                                          <span className="text-xs text-slate-500 font-bold">%</span>
                                       </div>
-                                      <button onClick={() => handleViewPdf(file.id)} className="p-2 text-blue-400 hover:bg-blue-900/50 rounded" title="Ver texto extraído"><Icons.Eye size={16}/></button>
-                                      <button onClick={() => {const f = editForm.files.filter((_, i) => i !== idx); deleteFromDB(file.id); setEditForm({...editForm, files: f});}} className="p-2 text-red-400 hover:bg-red-900/50 rounded"><Icons.Trash2 size={16}/></button>
+                                      <button onClick={() => setEditForm({...editForm, files: editForm.files.filter(f=>f.id!==file.id)})} className="text-red-400 p-2"><Icons.Trash2 size={16}/></button>
                                   </div>
                               ))}
+                              <p className="text-[10px] text-slate-500 italic mt-2">* El % representa el peso de las preguntas a generar de este PDF sobre el total.</p>
                           </div>
 
-                          <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
+                          <div className="glass-panel p-6 rounded-xl mb-6">
                               <div className="flex justify-between items-center mb-4">
                                   <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Internet)</label>
                                   <div className="flex gap-2">
-                                      <button onClick={handleMagicWand} disabled={generatingTopics} className="text-xs bg-purple-600 px-3 py-1 rounded font-bold flex items-center gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
-                                      <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold">+ Tema</button>
+                                      <button onClick={async () => {
+                                          const apiKey = window.localStorage.getItem('gemini_api_key');
+                                          if(!apiKey) return; setGeneratingTopics(true);
+                                          const res = await askGemini(JSON.parse(apiKey), `Temario Oposición: "${editForm.type}". JSON: [{"name": "Tema X", "pct": 10}]`);
+                                          setEditForm(prev=>({...prev, topics: extractJSON(res) || []})); setGeneratingTopics(false);
+                                      }} className="bg-purple-600 px-3 py-1 rounded text-xs font-bold flex items-center gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
+                                      <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="bg-blue-600 px-3 py-1 rounded text-xs font-bold">+ Tema</button>
                                   </div>
                               </div>
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
-                                      <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} />
-                                      <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded px-2">
-                                          <input type="number" className="w-16 bg-transparent text-sm text-white text-right font-bold focus:outline-none" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} />
+                                      <input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm" value={t.name} onChange={e => {const nt=[...editForm.topics]; nt[idx].name=e.target.value; setEditForm({...editForm, topics:nt});}} />
+                                      <div className="bg-slate-900 border border-slate-600 rounded flex items-center px-2 h-[38px]">
+                                          <input type="number" className="w-12 bg-transparent text-right text-sm font-bold" value={t.pct} onChange={e => {const nt=[...editForm.topics]; nt[idx].pct=parseFloat(e.target.value); setEditForm({...editForm, topics:nt});}} />
                                           <span className="text-xs text-slate-500 font-bold">%</span>
                                       </div>
-                                      <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2"><Icons.Trash2 size={18} /></button>
+                                      <button onClick={() => setEditForm({...editForm, topics: editForm.topics.filter((_,i)=>i!==idx)})} className="text-red-400 p-2"><Icons.Trash2 size={18}/></button>
                                   </div>
                               ))}
-                              <div className="text-right mt-2 text-xs font-bold border-t border-slate-700 pt-2 text-slate-500 italic">
-                                  * El % es el peso de las preguntas a hacer de cada tema. Suma actual: <span className={Math.abs(topicsTotal-100)<1?'text-green-400':'text-yellow-500'}>{topicsTotal}%</span>
-                              </div>
-                          </div>
-
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-indigo-900/10 border-indigo-500/30">
-                              <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria</h4>
-                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">{searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Search size={14}/>} Buscar Datos IA</button>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.date || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, date: e.target.value}})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.seats || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, seats: e.target.value}})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Nota de Corte</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.cutOff || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, cutOff: e.target.value}})} /></div>
-                              </div>
-                              <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                                  <div className="flex gap-2 items-center mb-3">
-                                      <input type="text" className="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCall?.examUrl || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examUrl: e.target.value}})} placeholder="URL PDF Examen..." />
-                                      {editForm.lastCall?.examUrl && <a href={editForm.lastCall.examUrl} target="_blank" className="bg-red-600 p-2 rounded text-white"><Icons.FileText size={14}/></a>}
-                                  </div>
-                                  <label className="flex items-center gap-2 cursor-pointer">
-                                      <input type="checkbox" checked={editForm.lastCall?.useExam || false} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, useExam: e.target.checked}})} className="w-4 h-4 accent-indigo-500"/>
-                                      <span className="text-xs text-white">Incluir en simulacros: </span>
-                                      {editForm.lastCall?.useExam && <div className="flex items-center gap-1 bg-slate-800 rounded px-2"><input type="number" className="w-12 bg-transparent text-right text-xs text-white focus:outline-none" value={editForm.lastCall?.examPct || 0} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examPct: parseFloat(e.target.value)}})} /><span className="text-[10px] text-slate-500 font-bold">%</span></div>}
-                                  </label>
+                              <div className="flex justify-between items-center mt-2 border-t border-slate-700 pt-2">
+                                  <p className="text-[10px] text-slate-500 italic">* El % representa el peso de las preguntas a generar de este tema específico.</p>
+                                  <div className="text-xs font-bold">Total: <span className={Math.abs(topicsTotal-100)<1?'text-green-400':'text-yellow-500'}>{topicsTotal}%</span></div>
                               </div>
                           </div>
 
                           <div className="flex gap-4 pt-6 border-t border-slate-700">
-                              <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
-                              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar Materia</button>
+                              <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl font-bold">Cancelar</button>
+                              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar</button>
                           </div>
                       </div>
-
-                      {viewingPdfText && (
-                          <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-6" onClick={() => setViewingPdfText(null)}>
-                              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
-                                  <div className="flex justify-between items-center mb-4"><h4 className="font-bold text-white">Texto extraído del PDF</h4><button onClick={() => setViewingPdfText(null)}><Icons.XCircle/></button></div>
-                                  <div className="flex-1 overflow-y-auto bg-black/40 p-4 rounded-lg text-xs font-mono text-slate-400 whitespace-pre-wrap">{viewingPdfText}</div>
-                              </div>
-                          </div>
+                      {viewingFile && (
+                        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6">
+                            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col p-6">
+                                <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h4 className="font-bold truncate">{viewingFile.name}</h4><button onClick={()=>setViewingFile(null)}><Icons.XCircle/></button></div>
+                                <div className="flex-1 overflow-y-auto bg-black/40 p-4 rounded text-xs text-slate-400 font-mono whitespace-pre-wrap">{viewingFile.content}</div>
+                            </div>
+                        </div>
                       )}
                   </div>
               );
@@ -438,13 +405,12 @@
 
           return (
               <div className="h-full flex flex-col p-6 fade-in overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Icons.Plus size={20}/> Nueva</button></div>
+                  <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-bold">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Icons.Plus size={20}/> Nueva</button></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
                       {subjects.map(sub => (
                           <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer relative ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
-                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                              {sub.lastCall?.date && <div className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-indigo-300">Última: {new Date(sub.lastCall.date).toLocaleDateString()} | Plazas: {sub.lastCall.seats}</div>}
-                              <div className="flex justify-end gap-2 mt-4"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 text-blue-400 hover:bg-slate-800 rounded"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 text-red-400 hover:bg-slate-800 rounded"><Icons.Trash2 size={18}/></button></div>
+                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 h-8 overflow-hidden">{sub.type}</p>
+                              <div className="flex justify-end gap-2 mt-4"><button onClick={(e)=>{e.stopPropagation(); handleEdit(sub);}} className="text-blue-400 p-2"><Icons.Settings size={18}/></button><button onClick={(e)=>{e.stopPropagation(); handleDelete(sub.id, sub);}} className="text-red-400 p-2"><Icons.Trash2 size={18}/></button></div>
                           </div>
                       ))}
                   </div>
@@ -462,9 +428,8 @@
 
           useEffect(() => {
               let timer;
-              if (status === 'active' && timeLeft > 0) {
-                  timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000);
-              } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
+              if (status === 'active' && timeLeft > 0) { timer = setInterval(() => { if (!isFetchingRef.current) updateState({ timeLeft: timeLeft - 1 }); }, 1000); }
+              else if (timeLeft === 0 && status === 'active') executeFinish();
               return () => clearInterval(timer);
           }, [status, timeLeft]);
 
@@ -474,27 +439,6 @@
               }
           }, [currentIndex, status, questions.length]);
 
-          const generateBatchPlan = () => {
-              const totalQs = activeSubject.qCount;
-              const files = activeSubject.files || [];
-              const officialPct = (activeSubject.lastCall?.useExam) ? (activeSubject.lastCall.examPct || 0) : 0;
-              let plan = []; 
-              files.forEach(f => {
-                  const count = Math.round((f.pct / 100) * totalQs);
-                  if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count });
-              });
-              const officialCount = Math.round((officialPct / 100) * totalQs);
-              if (officialCount > 0) plan.push({ type: 'official', id: 'off', name: activeSubject.lastCall.date, url: activeSubject.lastCall.examUrl, count: officialCount });
-              const internetCount = Math.max(0, totalQs - plan.reduce((s,p) => s + p.count, 0)); 
-              if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet', count: internetCount });
-              let queue = [];
-              plan.forEach(source => {
-                  let remain = source.count;
-                  while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; }
-              });
-              return queue;
-          };
-
           const loadNextBatch = async () => {
               if (isFetchingRef.current || batchQueue.length === 0) return;
               isFetchingRef.current = true;
@@ -503,42 +447,36 @@
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, url: nextBatch.url || '', content: '' };
                   if (nextBatch.type === 'pdf') sourceConfig.content = await getFromDB(nextBatch.id);
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  if (newQs.length > 0) {
-                      updateState({ questions: [...questions, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) });
-                  } else { updateState({ batchQueue: batchQueue.slice(1) }); }
-              } catch (e) { console.error(e); updateState({ batchQueue: batchQueue.slice(1) }); } 
+                  updateState({ questions: [...questions, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) });
+              } catch (e) { updateState({ batchQueue: batchQueue.slice(1) }); } 
               finally { setTimeout(() => { isFetchingRef.current = false; }, 3000); }
           };
 
           const startExam = async () => {
-              if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
-              const queue = generateBatchPlan();
-              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Iniciando simulador...', error: null });
+              if (!activeSubject || !apiKey) return alert("Falta configuración.");
+              const totalQs = activeSubject.qCount;
+              const files = activeSubject.files || [];
+              const officialPct = (activeSubject.lastCall?.useExam) ? (activeSubject.lastCall.examPct || 0) : 0;
+              let plan = []; 
+              files.forEach(f => { const c = Math.round((f.pct / 100) * totalQs); if(c>0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: c }); });
+              const offC = Math.round((officialPct / 100) * totalQs); if (offC > 0) plan.push({ type: 'official', id: 'off', name: activeSubject.lastCall.date, url: activeSubject.lastCall.examUrl, count: offC });
+              const intC = Math.max(0, totalQs - plan.reduce((s,p) => s + p.count, 0)); if(intC > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet', count: intC });
+              let queue = []; plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
+              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Iniciando simulador...' });
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, url: firstBatch.url || '', content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
                   updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
-              } catch (e) { updateState({ error: e.message, status: 'idle' }); } 
-              finally { isFetchingRef.current = false; }
-          };
-
-          const handleAnswer = (optionIdx) => {
-              updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
-              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
-              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) { setTimeout(() => setShowFinishConfirm(true), 500); }
+              } catch (e) { updateState({ status: 'idle' }); } finally { isFetchingRef.current = false; }
           };
 
           const executeFinish = () => {
               setShowFinishConfirm(false);
-              let hits = 0, misses = 0, skips = 0;
-              questions.forEach((q, idx) => {
-                  const ans = answers[idx];
-                  if (ans === undefined || ans === -1) skips++; else if (ans === q.correct) hits++; else misses++;
-              });
-              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss);
-              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage: (points / (activeSubject.qCount * activeSubject.pointsHit)) * 100, hits, misses, skips, total: activeSubject.qCount, maxScorePossible: activeSubject.qCount * activeSubject.pointsHit, cutOffPoints: (activeSubject.cutOffPct / 100) * (activeSubject.qCount * activeSubject.pointsHit) });
+              let h=0, m=0, s=0; questions.forEach((q, idx) => { const a = answers[idx]; if (a === undefined || a === -1) s++; else if (a === q.correct) h++; else m++; });
+              const pts = (h * activeSubject.pointsHit) + (m * activeSubject.pointsMiss);
+              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: pts, percentage: (pts / (activeSubject.qCount * activeSubject.pointsHit)) * 100, hits: h, misses: m, skips: s, total: activeSubject.qCount, maxScorePossible: activeSubject.qCount * activeSubject.pointsHit, cutOffPoints: (activeSubject.cutOffPct / 100) * (activeSubject.qCount * activeSubject.pointsHit) });
               updateState({ status: 'finished' });
           };
 
@@ -548,16 +486,13 @@
                       <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
                           <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                           <p className="text-slate-400 mb-8">{activeSubject.type}</p>
-                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-all scale-100 hover:scale-105"><Icons.Play size={24}/> COMENZAR</button>
+                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all scale-100 hover:scale-105">COMENZAR SIMULACRO</button>
                       </div>
                   )}
               </div>
           );
 
-          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
-
-          const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
-          const currentQ = questions[currentIndex];
+          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold animate-pulse">{loadingMsg}</h3></div>;
 
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
@@ -565,9 +500,7 @@
                       <div className="flex justify-between items-center mb-2 px-2">
                           <div className="flex items-center gap-8">
                               <div className="text-xl font-mono font-bold text-white bg-slate-800 px-3 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
-                              <div className="hidden sm:block leading-tight">
-                                  <div className="text-xl font-bold text-white">{currentIndex + 1} <span className="text-slate-500">/ {activeSubject.qCount}</span> <span className="text-sm font-mono text-blue-400 font-normal ml-2">[{progressPct}%]</span></div>
-                              </div>
+                              <div className="text-xl font-bold text-white leading-none">{currentIndex + 1} <span className="text-slate-500">/ {activeSubject.qCount}</span></div>
                           </div>
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 rounded text-blue-400"><Icons.Grid size={18}/></button>
@@ -577,70 +510,58 @@
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center px-2">
                           <div className="col-span-4 grid grid-cols-5 gap-2">
-                              <div className="bg-green-900/20 rounded py-1 text-center"><div className="text-[8px] text-green-500 font-bold uppercase">Aciertos</div><div className="text-xs font-bold text-green-400">{Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length}</div></div>
-                              <div className="bg-red-900/20 rounded py-1 text-center"><div className="text-[8px] text-red-500 font-bold uppercase">Fallos</div><div className="text-xs font-bold text-red-400">{Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length}</div></div>
-                              <div className="bg-slate-800/50 rounded py-1 text-center"><div className="text-[8px] text-slate-400 font-bold uppercase">Omitidas</div><div className="text-xs font-bold text-slate-300">{Object.values(answers).filter(a=>a===-1).length}</div></div>
-                              <div className="bg-indigo-900/20 rounded py-1 text-center"><div className="text-[8px] text-indigo-400 font-bold uppercase">Netas</div><div className="text-xs font-bold text-indigo-300">{(Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length) - (Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length)}</div></div>
-                              <div className="bg-purple-900/20 rounded py-1 text-center"><div className="text-[8px] text-purple-400 font-bold uppercase">Corte</div><div className="text-xs font-bold text-white">{((activeSubject.qCount * activeSubject.pointsHit * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
+                              <div className="bg-green-900/20 rounded py-1 text-center"><div className="text-[8px] text-green-500 uppercase">Aciertos</div><div className="text-xs font-bold text-green-400">{Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length}</div></div>
+                              <div className="bg-red-900/20 rounded py-1 text-center"><div className="text-[8px] text-red-500 uppercase">Fallos</div><div className="text-xs font-bold text-red-400">{Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length}</div></div>
+                              <div className="bg-slate-800/50 rounded py-1 text-center"><div className="text-[8px] text-slate-400 uppercase">Omitidas</div><div className="text-xs font-bold text-slate-300">{Object.values(answers).filter(a=>a===-1).length}</div></div>
+                              <div className="bg-indigo-900/20 rounded py-1 text-center"><div className="text-[8px] text-indigo-400 uppercase font-bold">Netas</div><div className="text-xs font-bold text-indigo-300">{(Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length)-(Object.values(answers).filter((a,i)=>a!==-1 && a!==questions[i]?.correct).length)}</div></div>
+                              <div className="bg-purple-900/20 rounded py-1 text-center"><div className="text-[8px] text-purple-400 uppercase">Corte</div><div className="text-xs font-bold text-white">{((activeSubject.qCount*activeSubject.pointsHit*activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
                           </div>
-                          <div className="bg-slate-800 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2">
-                              <div className="text-[9px] text-yellow-500 font-bold uppercase leading-none">Tasa Global</div>
+                          <div className="bg-slate-800 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-inner">
+                              <div className="text-[9px] text-yellow-500 uppercase leading-none font-bold">Tasa Global</div>
                               <div className="text-2xl font-display font-bold text-yellow-400 leading-none">{( (Object.values(answers).filter((a,i)=>a===questions[i]?.correct).length / activeSubject.qCount)*100 ).toFixed(1)}%</div>
                           </div>
                       </div>
-                      <div className="relative h-1.5 bg-slate-800 rounded-full overflow-hidden mx-2"><div className="absolute top-0 left-0 h-full bg-green-500 transition-all duration-500" style={{width: `${(Object.keys(answers).length / activeSubject.qCount) * 100}%`}}></div></div>
+                      <div className="relative h-1.5 bg-slate-800 rounded-full overflow-hidden mx-2"><div className="absolute top-0 left-0 h-full bg-green-500" style={{width: `${(Object.keys(answers).length / activeSubject.qCount) * 100}%`}}></div></div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
                       <div className="max-w-4xl mx-auto">
                           {currentQ ? (
                               <>
-                                <div className="flex items-center gap-2 mb-2"><div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{currentQ.topic || "Tema General"}</div><div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded border border-indigo-700">{currentQ.origin}</div></div>
-                                <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{currentQ.question}</h2>
+                                <div className="flex items-center gap-2 mb-2"><div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{currentQ.topic || "General"}</div><div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded border border-indigo-700">{currentQ.origin}</div></div>
+                                <h2 className="text-lg md:text-xl font-bold mb-6 leading-snug">{currentQ.question}</h2>
                                 <div className="grid grid-cols-1 gap-3">
                                     {currentQ.options.slice(0, activeSubject.optionsCount).map((opt, idx) => {
-                                        let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
-                                        const isAns = answers[currentIndex] === idx;
+                                        let bC = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
                                         if (answers[currentIndex] !== undefined) {
-                                            if (idx === currentQ.correct) btnClass = "bg-green-900/40 border-green-500 text-green-200";
-                                            else if (isAns) btnClass = "bg-red-900/40 border-red-500 text-red-200";
-                                            else btnClass = "opacity-50";
+                                            if (idx === currentQ.correct) bC = "bg-green-900/40 border-green-500 text-green-200";
+                                            else if (answers[currentIndex] === idx) bC = "bg-red-900/40 border-red-500 text-red-200";
+                                            else bC = "opacity-50";
                                         }
-                                        return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
+                                        return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => {
+                                            updateState({ answers: { ...answers, [currentIndex]: idx } });
+                                            if (autoNext && currentIndex < activeSubject.qCount - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
+                                        }} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${bC}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
                                     })}
                                 </div>
-                                {answers[currentIndex] !== undefined && answers[currentIndex] !== currentQ.correct && <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">{currentQ.explanation}</div>}
+                                {answers[currentIndex] !== undefined && answers[currentIndex] !== currentQ.correct && <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm">{currentQ.explanation}</div>}
                               </>
-                          ) : <div className="flex flex-col items-center justify-center py-20 animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold text-white font-display">GENERANDO PREGUNTAS...</div></div>}
+                          ) : <div className="flex flex-col items-center justify-center py-20 animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold">GENERANDO PREGUNTAS...</div></div>}
                       </div>
                   </div>
 
-                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30">
                        <div className="flex gap-2">
-                           <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
-                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                           <button onClick={() => updateState({ answers: {...answers, [currentIndex]: -1}, currentIndex: Math.min(activeSubject.qCount-1, currentIndex+1) })} className="px-4 py-3 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold">OMITIR</button>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs font-bold">AUTO</span></label>
                        </div>
                        <div className="flex gap-2">
-                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white shadow-lg"><Icons.ArrowLeft size={20}/></button>
-                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white shadow-lg"><Icons.ArrowRight size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 rounded-lg text-white"><Icons.ArrowLeft/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.min(activeSubject.qCount-1, currentIndex+1) })} className="px-5 py-3 bg-blue-600 rounded-lg text-white"><Icons.ArrowRight/></button>
                        </div>
                   </div>
-
-                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4 text-white font-bold">Mapa <button onClick={() => updateState({ showGrid: false })}><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">
-                      {Array.from({length: activeSubject.qCount}).map((_, i) => {
-                          let bg = "bg-slate-800 text-slate-500 border-slate-700";
-                          const ans = answers[i];
-                          if (i < questions.length && ans !== undefined) {
-                              if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500";
-                              else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500";
-                              else bg = "bg-red-900/60 text-red-400 border-red-500";
-                          }
-                          return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button>
-                      })}
-                  </div></div></div>}
-
                   <Modal isOpen={showRestartConfirm} title="¿REINICIAR?" message="Se perderá el progreso." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={() => { setShowRestartConfirm(false); updateState({ status: 'idle', questions: [], answers: {}, currentIndex: 0 }); }} />
-                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Seguro que quieres finalizar y guardar?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
+                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Seguro que quieres guardar?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
               </div>
           );
       };
@@ -651,102 +572,81 @@
               if (results.length === 0) return null;
               const total = results.length;
               const avgScore = results.reduce((acc, r) => acc + (r.score || 0), 0) / total;
+              const avgPct = results.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
               const avgProgress = results.reduce((acc, r) => acc + (((r.hits+r.misses+r.skips)/r.total)*100), 0) / total;
+              const avgHits = results.reduce((acc, r) => acc + r.hits, 0) / total;
+              const avgMisses = results.reduce((acc, r) => acc + r.misses, 0) / total;
+              const avgSkips = results.reduce((acc, r) => acc + r.skips, 0) / total;
               const avgNetas = results.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
               const avgGlobalHitRate = results.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
-              const maxPointsPossible = results[0]?.maxScorePossible || 600;
-              const cutOffLine = results[0]?.cutOffPoints || 0;
-              return { total, avgScore, avgProgress, avgNetas, avgGlobalHitRate, maxPointsPossible, cutOffLine };
+              return { total, avgScore, avgPct, avgProgress, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, maxPointsPossible: results[0]?.maxScorePossible || 600, cutOffLine: results[0]?.cutOffPoints || 0 };
           }, [results]);
 
           return (
               <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
-                  <div className="flex justify-between items-center mb-6 shrink-0">
-                      <h3 className="text-2xl font-display font-bold text-white">Historial</h3>
-                      <div className="flex gap-2">
-                          <button onClick={() => setShowGraph(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.BarChart3 size={16}/> GRÁFICO</button>
-                          <button onClick={onClear} className="text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-900/20 rounded">Limpiar</button>
-                      </div>
-                  </div>
-
+                  <div className="flex justify-between items-center mb-6 shrink-0"><h3 className="text-2xl font-bold">Historial</h3><div className="flex gap-2"><button onClick={() => setShowGraph(true)} className="bg-blue-600 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.BarChart3 size={16}/> GRÁFICO</button><button onClick={onClear} className="text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-900/20 rounded">Limpiar</button></div></div>
                   {stats && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold text-white">{stats.total}</div><div className="text-xs text-slate-400 uppercase font-bold">Simulacros</div></div></div>
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-white">{stats.avgScore.toFixed(1)}</div><div className="text-xs text-slate-400 uppercase font-bold">Nota Media</div></div></div>
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold text-white">{stats.avgGlobalHitRate.toFixed(1)}%</div><div className="text-xs text-slate-400 uppercase font-bold">% Acierto</div></div></div>
-                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-yellow-500/20 rounded-full text-yellow-400"><Icons.Clock/></div><div><div className="text-2xl font-bold text-white">{stats.avgProgress.toFixed(0)}%</div><div className="text-xs text-slate-400 uppercase font-bold">% Progreso</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-blue-500/20 rounded-full text-blue-400"><Icons.BookOpen/></div><div><div className="text-2xl font-bold">{stats.total}</div><div className="text-[10px] text-slate-400 uppercase">Simulacros</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-green-500/20 rounded-full text-green-400"><Icons.BarChart3/></div><div><div className="text-2xl font-bold text-blue-400">{stats.avgScore.toFixed(1)}</div><div className="text-[10px] text-slate-400 uppercase">Nota Media</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-purple-500/20 rounded-full text-purple-400"><Icons.CheckCircle/></div><div><div className="text-2xl font-bold">{stats.avgGlobalHitRate.toFixed(1)}%</div><div className="text-[10px] text-slate-400 uppercase">% Acierto</div></div></div>
+                          <div className="glass-panel p-4 rounded-xl flex items-center gap-4"><div className="p-3 bg-yellow-500/20 rounded-full text-yellow-400"><Icons.Clock/></div><div><div className="text-2xl font-bold">{stats.avgProgress.toFixed(0)}%</div><div className="text-[10px] text-slate-400 uppercase">Progreso</div></div></div>
+                          <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-4 gap-2 text-center border-slate-800">
+                              <div><div className="text-[10px] text-green-500 font-bold uppercase">Media Aciertos</div><div className="text-lg font-bold">{stats.avgHits.toFixed(1)}</div></div>
+                              <div className="border-l border-slate-700"><div><div className="text-[10px] text-red-500 font-bold uppercase">Media Fallos</div><div className="text-lg font-bold">{stats.avgMisses.toFixed(1)}</div></div></div>
+                              <div className="border-l border-slate-700"><div><div className="text-[10px] text-slate-400 font-bold uppercase">Media Omitidas</div><div className="text-lg font-bold">{stats.avgSkips.toFixed(1)}</div></div></div>
+                              <div className="border-l border-slate-700"><div><div className="text-[10px] text-indigo-400 font-bold uppercase">Media Netas</div><div className="text-lg font-bold text-indigo-300">{stats.avgNetas.toFixed(1)}</div></div></div>
+                          </div>
                       </div>
                   )}
-
                   <div className="bg-slate-900/50 border border-slate-800 rounded-xl flex-1 relative overflow-auto custom-scrollbar">
                       <table className="w-full text-left">
-                          <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">% Acierto</th><th className="p-4 text-center">Progreso</th><th className="p-4 text-right">A/F/O [Net]</th><th className="p-4"></th></tr></thead>
+                          <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase sticky top-0 z-10"><tr><th className="p-4">Fecha</th><th className="p-4">Materia</th><th className="p-4 text-center">Puntos</th><th className="p-4 text-center">Nota %</th><th className="p-4 text-center">% Acierto</th><th className="p-4 text-center">Progreso</th><th className="p-4 text-right">A/F/O [Net]</th><th className="p-4"></th></tr></thead>
                           <tbody className="divide-y divide-slate-800 text-slate-300">
-                              {results.map((r, i) => (
-                                  <tr key={i} className="hover:bg-slate-800/30">
-                                      <td className="p-4 text-xs font-mono">{new Date(r.date).toLocaleDateString()}</td>
-                                      <td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td>
+                              {results.map((r, i) => {
+                                  const answered = r.hits + r.misses + r.skips;
+                                  return (
+                                  <tr key={i} className="hover:bg-slate-800/30 text-xs">
+                                      <td className="p-4 font-mono">{new Date(r.date).toLocaleDateString()}</td>
+                                      <td className="p-4 font-bold truncate max-w-[150px]">{r.subjectName}</td>
                                       <td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td>
-                                      <td className="p-4 text-center text-green-400 font-bold">{((r.hits/r.total)*100).toFixed(1)}%</td>
-                                      <td className="p-4 text-center text-xs text-slate-400">{r.hits+r.misses+r.skips}/{r.total} <span className="font-bold text-white">({( ((r.hits+r.misses+r.skips)/r.total)*100 ).toFixed(0)}%)</span></td>
-                                      <td className="p-4 text-right text-xs font-mono">{r.hits}/{r.misses}/{r.skips} <span className="text-indigo-300 font-bold ml-1">[{r.hits-r.misses}]</span></td>
-                                      <td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="text-red-500 p-2"><Icons.Trash2 size={14}/></button></td>
+                                      <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td>
+                                      <td className="p-4 text-center text-green-400">{( (r.hits/r.total)*100 ).toFixed(1)}%</td>
+                                      <td className="p-4 text-center">{answered} / {r.total} ({((answered/r.total)*100).toFixed(0)}%)</td>
+                                      <td className="p-4 text-right font-mono">{r.hits}/{r.misses}/{r.skips} <span className="text-indigo-300">[{r.hits-r.misses}]</span></td>
+                                      <td className="p-4 text-right"><button onClick={()=>onDeleteOne(i)} className="text-red-500"><Icons.Trash2 size={14}/></button></td>
                                   </tr>
-                              ))}
+                              )})}
                           </tbody>
                       </table>
                   </div>
-
                   {showGraph && (
-                      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-6 fade-in" onClick={() => setShowGraph(false)}>
-                          <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-bold text-white flex items-center gap-3 font-display"><Icons.BarChart3 size={28} className="text-blue-500"/> Evolución</h3><button onClick={() => setShowGraph(false)} className="text-slate-400 p-2 hover:bg-slate-800 rounded-full"><Icons.XCircle size={32}/></button></div>
+                      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-6" onClick={() => setShowGraph(false)}>
+                          <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
+                             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-bold flex items-center gap-3 font-display"><Icons.BarChart3 size={28} className="text-blue-500"/> Evolución</h3><button onClick={()=>setShowGraph(false)}><Icons.XCircle size={32}/></button></div>
                              <div className="flex-1 overflow-x-auto border border-slate-800 rounded-xl bg-black/40 p-6 relative custom-scrollbar">
-                                  <div style={{minWidth: `${Math.max(800, results.length * 80)}px`, height: '420px', position: 'relative'}}>
-                                       <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(800, results.length * 80)} 420`}>
+                                  <div style={{minWidth: `${Math.max(800, results.length*80)}px`, height: '420px', position: 'relative'}}>
+                                       <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(800, results.length*80)} 420`}>
                                             {(() => {
                                                 const steps = []; const maxVal = stats.maxPointsPossible;
                                                 for (let v = 0; v <= maxVal; v += 20) {
                                                     const yPos = 360 - (v / maxVal * 320);
-                                                    steps.push(<g key={v}><line x1="50" y1={yPos} x2="100%" y2={yPos} stroke="#ffffff" strokeWidth="1" opacity="0.05" /><text x="40" y={yPos + 4} textAnchor="end" fill="#64748b" fontSize="10" fontWeight="bold">{v}</text></g>);
-                                                }
-                                                return steps;
+                                                    steps.push(<g key={v}><line x1="50" y1={yPos} x2="100%" y2={yPos} stroke="#ffffff" strokeWidth="1" opacity="0.05" /><text x="40" y={yPos+4} textAnchor="end" fill="#64748b" fontSize="10" fontWeight="bold">{v}</text></g>);
+                                                } return steps;
                                             })()}
                                             <line x1="50" y1="360" x2="100%" y2="360" stroke="#475569" strokeWidth="2" />
                                             <line x1="50" y1="40" x2="50" y2="360" stroke="#475569" strokeWidth="2" />
-                                            {(() => {
-                                                const maxV = stats.maxPointsPossible; const cutY = 360 - (stats.cutOffLine / maxV * 320);
-                                                return <g><line x1="50" y1={cutY} x2="100%" y2={cutY} stroke="#22c55e" strokeWidth="2" opacity="0.8" /><text x="55" y={cutY - 5} fill="#22c55e" fontSize="10" fontWeight="bold">CORTE: {stats.cutOffLine.toFixed(0)} pts</text></g>;
-                                            })()}
-                                            {(() => {
-                                                const maxV = stats.maxPointsPossible; const avgY = 360 - (stats.avgScore / maxV * 320);
-                                                return <g><line x1="50" y1={avgY} x2="100%" y2={avgY} stroke="#eab308" strokeWidth="2" strokeDasharray="5,5" opacity="0.6" /><text x="100%" y={avgY - 5} textAnchor="end" fill="#eab308" fontSize="10" fontWeight="bold">MEDIA: {stats.avgScore.toFixed(1)} pts</text></g>;
-                                            })()}
+                                            {(() => { const maxV=stats.maxPointsPossible; const cutY=360-(stats.cutOffLine/maxV*320); return (<g><line x1="50" y1={cutY} x2="100%" y2={cutY} stroke="#22c55e" strokeWidth="2" opacity="0.8" /><text x="55" y={cutY-5} fill="#22c55e" fontSize="10" fontWeight="bold">CORTE: {stats.cutOffLine.toFixed(0)} pts</text></g>); })()}
                                             {results.slice().reverse().map((h, i) => {
-                                                const maxV = stats.maxPointsPossible; const barH = (h.score / maxV) * 320; const xP = 80 + (i * 80); const yP = 360 - barH;
-                                                return <g key={i}><rect x={xP} y={yP} width="40" height={barH} fill="#3b82f6" rx="4" className="hover:fill-blue-400 transition-colors" /><text x={xP + 20} y={yP - 10} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{h.score.toFixed(1)}</text><text x={xP + 20} y={380} textAnchor="middle" fill="#94a3b8" fontSize="9">{new Date(h.date).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'})}</text></g>;
+                                                const maxV = stats.maxPointsPossible; const barH = (h.score/maxV)*320; const xP = 80+(i*80); const yP = 360-barH;
+                                                return (<g key={i}><rect x={xP} y={yP} width="40" height={barH} fill="#3b82f6" rx="4" /><text x={xP+20} y={yP-10} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{h.score.toFixed(1)}</text><text x={xP+20} y={380} textAnchor="middle" fill="#94a3b8" fontSize="9">{new Date(h.date).toLocaleDateString(undefined, {day:'2-digit',month:'2-digit'})}</text></g>);
                                             })}
                                        </svg>
                                   </div>
                              </div>
-                             <div className="mt-4 text-center text-slate-500 text-xs italic">Escala dinámica ajustada al baremo de la oposición.</div>
                           </div>
                       </div>
                   )}
-              </div>
-          );
-      };
-
-      const Modal = ({ isOpen, title, message, type, onClose, onConfirm }) => {
-          if (!isOpen) return null;
-          return (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-6 fade-in">
-                  <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
-                      <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${type === 'danger' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.AlertTriangle size={40} /></div>
-                      <h3 className="text-xl font-bold text-white mb-2 uppercase font-display">{title}</h3>
-                      <p className="text-slate-400 text-sm mb-8 leading-relaxed">{message}</p>
-                      <div className="flex gap-3">{onConfirm ? (<><button onClick={onClose} className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl">CANCELAR</button><button onClick={onConfirm} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl">CONFIRMAR</button></>) : (<button onClick={onClose} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">ENTENDIDO</button>)}</div>
-                  </div>
               </div>
           );
       };
@@ -766,43 +666,36 @@
           const trialExhausted = tc >= 10;
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
 
-          const handleActivate = (code) => {
-              if(!code) return;
-              if(_bg_check_sys(code)) { setRk(code); setIsRegistered(true); setModal({ open: true, title: 'REGISTRADO', message: 'Sistema activado correctamente.', type: 'success' }); } 
-              else { setRk(''); setIsRegistered(false); setTc(0); setModal({ open: true, title: 'ERROR', message: 'Código inválido. Contador reiniciado.', type: 'danger' }); }
-          };
-
           return (
               <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
                   <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
                       <div><h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight"><span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Oposiciones Simulador AI</p></div>
                       <nav className="flex bg-slate-800 rounded-lg p-1 gap-1">
-                          <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.BookOpen size={16}/> <span className="hidden md:inline">Materias</span></button>
-                          <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Play size={16}/> <span className="hidden md:inline">Simulacro</span></button>
-                          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Clock size={16}/> <span className="hidden md:inline">Histórico</span></button>
-                          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
+                          <button onClick={()=>setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase flex items-center gap-2 ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><Icons.BookOpen size={16}/> <span className="hidden md:inline">Materias</span></button>
+                          <button onClick={()=>setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase flex items-center gap-2 ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><Icons.Play size={16}/> <span className="hidden md:inline">Simulacro</span></button>
+                          <button onClick={()=>setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase flex items-center gap-2 ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><Icons.Clock size={16}/> <span className="hidden md:inline">Historial</span></button>
+                          <button onClick={()=>setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
                       </nav>
                   </header>
-
                   <main className="flex-1 overflow-hidden relative">
                       {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
                       {activeTab === 'exam' && (
                           (!isAuth && trialExhausted) ? (
-                              <div className="h-full flex flex-col items-center justify-center p-6 text-center fade-in"><div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl"><Icons.AlertTriangle size={48} className="text-red-500 mx-auto mb-6" /><h2 className="text-2xl font-bold mb-4 uppercase font-display">PRUEBA FINALIZADA</h2><p className="text-slate-400 text-sm mb-6 leading-relaxed">Has agotado tus 10 sesiones de cortesía. Activa el sistema para continuar.</p><button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 font-bold rounded-xl transition-all shadow-lg hover:bg-blue-500 uppercase">Activar</button></div></div>
-                          ) : (
-                              <ExamTab activeSubject={activeSubject} session={examSession} setSession={setExamSession}
-                                  onSaveResult={(r)=>{ if(!isAuth) setTc(prev => prev + 1); setHistory(prev=>[r,...prev]); setActiveTab('history'); setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null }); }} 
-                              />
-                          )
+                              <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                                  <Icons.AlertTriangle size={48} className="text-red-500 mb-6" />
+                                  <h2 className="text-2xl font-bold mb-4 font-display">PRUEBA FINALIZADA</h2>
+                                  <p className="text-slate-400 mb-6">Has agotado tus 10 sesiones de cortesía.</p>
+                                  <button onClick={()=>setActiveTab('settings')} className="bg-blue-600 px-8 py-4 rounded-xl font-bold">ACTIVAR SISTEMA</button>
+                              </div>
+                          ) : <ExamTab activeSubject={activeSubject} session={examSession} setSession={setExamSession} onSaveResult={(r)=>{ if(!isAuth) setTc(p=>p+1); setHistory(h=>[r,...h]); setActiveTab('history'); setExamSession({status:'idle', questions:[], answers:{}, currentIndex:0, timeLeft:0, autoNext:false, showGrid:false, batchQueue:[], loadingMsg:'', error:null}); }} />
                       )}
                       {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} />}
-                      {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
+                      {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={(code)=>{ if(_bg_check_sys(code)){setRk(code);setIsRegistered(true);setModal({open:true,title:'EXITO',message:'Activado',type:'success'});}else{setRk('');setIsRegistered(false);setTc(0);setModal({open:true,title:'ERROR',message:'Código inválido',type:'danger'});} }} />}
                   </main>
-                  <Modal isOpen={modal.open} title={modal.title} message={modal.message} type={modal.type} onClose={() => setModal({ ...modal, open: false })} />
+                  <Modal isOpen={modal.open} title={modal.title} message={modal.message} onClose={()=>setModal({...modal, open:false})} />
               </div>
           );
       };
-
       createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>

@@ -48,14 +48,9 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // --- SISTEMA DE VALIDACIÓN ---
       const _bg_check_sys = (k) => {
-          if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
-          const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
-          return k.trim().toUpperCase() === hex || k.trim() === val.toString();
+          if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase();  return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
-
-      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );

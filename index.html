@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -48,13 +47,14 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // Sistema de validación
+      // --- SISTEMA DE VALIDACIÓN ---
       const _bg_check_sys = (k) => {
           if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();
           const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase(); 
           return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
 
+      // --- ICONOS ---
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -86,6 +86,7 @@
         Wand: (p) => <IconBase {...p}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2L11 5"/></IconBase>
       };
 
+      // --- BASE DE DATOS (PDFs) ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const openDB = () => {
@@ -127,6 +128,7 @@
            });
       };
 
+      // --- HOOKS ---
       const usePersistentState = (key, initialValue) => {
         const [state, setState] = useState(() => {
             try {
@@ -140,13 +142,7 @@
         return [state, setState];
       };
 
-      const formatTime = (seconds) => {
-          const h = Math.floor(seconds / 3600);
-          const m = Math.floor((seconds % 3600) / 60);
-          const s = seconds % 60;
-          return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-      };
-
+      // --- HELPERS IA ---
       const askGemini = async (apiKey, prompt) => {
           const savedModel = window.localStorage.getItem('gemini_model');
           const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
@@ -190,6 +186,15 @@
           const parsed = extractJSON(rawText);
           return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]` }));
       };
+
+      const formatTime = (seconds) => {
+          const h = Math.floor(seconds / 3600);
+          const m = Math.floor((seconds % 3600) / 60);
+          const s = seconds % 60;
+          return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+      };
+
+      // --- COMPONENTES PRINCIPALES ---
 
       const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
@@ -265,9 +270,7 @@
                           <div><h2 className="text-2xl font-bold text-white">Registro de la aplicación</h2><p className="text-slate-400 text-sm">Estado de la instalación y licencia</p></div>
                       </div>
                       <div className="space-y-6">
-                          <p className="text-sm text-slate-400 leading-relaxed italic">
-                              Esta plataforma es un proyecto independiente que se sustenta exclusivamente mediante un modelo de <strong>crowdfunding</strong> y las aportaciones directas de sus usuarios. Tu registro ayuda a mantener los costes de desarrollo y mantenimiento.
-                          </p>
+                          <p className="text-sm text-slate-400 leading-relaxed italic">Esta plataforma es un proyecto independiente que se sustenta exclusivamente mediante un modelo de <strong>crowdfunding</strong> y las aportaciones directas de sus usuarios. Tu registro ayuda a mantener los costes de desarrollo y mantenimiento.</p>
                           <div className="bg-black/30 border border-slate-700 rounded-xl p-5">
                               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Número de Registro / Código de Instalación</label>
                               <div className="flex gap-3">
@@ -278,9 +281,7 @@
                           </div>
                           {!isAuth && (
                               <div className="flex justify-between items-center bg-blue-900/10 border border-blue-500/30 rounded-xl p-4">
-                                  <div className="text-sm text-blue-200">
-                                      Periodo de cortesía consumido: <span className="font-bold ml-1">{trialCount} de 4 sesiones</span>
-                                  </div>
+                                  <div className="text-sm text-blue-200">Periodo de cortesía consumido: <span className="font-bold ml-1">{trialCount} de 4 sesiones</span></div>
                                   <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: `${(trialCount/4)*100}%`}}></div></div>
                               </div>
                           )}
@@ -360,7 +361,6 @@
               setEditForm({...editForm, files: newFiles});
           };
 
-         
           const handleSearchDescription = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
@@ -369,7 +369,6 @@
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
               
-              // Prompt actualizado para pedir metadatos técnicos
               const prompt = `Actúa como experto en Oposiciones y Másters de España. Busca hasta 5 coincidencias oficiales para: "${query}". 
               Para cada una, intenta obtener los datos técnicos del primer ejercicio o test. 
               Devuelve ÚNICAMENTE un JSON array de objetos con este formato exacto: 
@@ -381,7 +380,6 @@
                   const list = extractJSON(res);
                   
                   if(Array.isArray(list) && list.length > 0) {
-                      // Validamos que los objetos tengan estructura mínima para evitar errores
                       const safeList = list.map(item => ({
                           label: item.label || "Desconocido",
                           q: parseInt(item.q) || 200,
@@ -433,7 +431,6 @@
                                           <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} placeholder="Ej: Auxiliar Administrativo Estado" />
                                           <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
                                       </div>
-
                                       {descResults.length > 0 && (
                                           <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
                                               <div className="flex justify-between p-2 bg-slate-900/50">
@@ -460,7 +457,6 @@
                                               ))}
                                           </div>
                                       )}
-
                                   </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -650,7 +646,7 @@
           const executeFinish = () => {
               setShowFinishConfirm(false);
               const finalStats = calculateStats();
-              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, misses: finalStats.misses, skips: finalStats.skips, total: questions.length });
+              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, misses: finalStats.misses, skips: finalStats.skips, total: activeSubject.qCount });
               updateState({ status: 'finished' });
           };
 
@@ -726,16 +722,17 @@
                           </div>
                       </div>
                       <div className="grid grid-cols-6 gap-2 mb-2 items-center">
-                          <div className="col-span-4 grid grid-cols-4 gap-2">
+                          <div className="col-span-4 grid grid-cols-5 gap-2">
                               <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits} <span className="opacity-70">({hitPct}%)</span></div></div>
                               <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
                               <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
+                              <div className="bg-indigo-900/20 border border-indigo-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-indigo-400 uppercase font-bold">[Netas]</div><div className="text-xs font-bold text-indigo-300">{stats.hits - stats.misses}</div></div>
                               <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{((stats.maxPoints * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
                           </div>
                           <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-[0_0_10px_rgba(234,179,8,0.1)]">
-                              <div className="text-[9px] text-yellow-500/80 uppercase font-bold leading-none mb-1">Puntos</div>
-                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none">{stats.points.toFixed(1)}</div>
-                              <div className="text-[9px] text-yellow-200/60 font-bold mt-0.5">Tasa: {((stats.hits/(stats.hits+stats.misses+stats.skips||1))*100).toFixed(1)}%</div>
+                              <div className="text-[9px] text-yellow-500/80 uppercase font-bold leading-none mb-1">Tasa Global</div>
+                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none">{((stats.hits / activeSubject.qCount) * 100).toFixed(1)}%</div>
+                              <div className="text-[9px] text-yellow-200/60 font-bold mt-0.5">Puntos: {stats.points.toFixed(1)}</div>
                           </div>
                       </div>
                       <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / stats.maxPoints) * 100}%`}}></div></div>
@@ -833,7 +830,11 @@
               const avgHits = results.reduce((acc, r) => acc + r.hits, 0) / total;
               const avgMisses = results.reduce((acc, r) => acc + r.misses, 0) / total;
               const avgSkips = results.reduce((acc, r) => acc + r.skips, 0) / total;
-              return { total, avgScore, avgPct, avgProgress, avgHits, avgMisses, avgSkips };
+              const avgNetas = results.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
+              // Nueva métrica: % Acierto Global medio (Hits/Total Exam)
+              const avgGlobalHitRate = results.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
+
+              return { total, avgScore, avgPct, avgProgress, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate };
           }, [results]);
 
           return (
@@ -843,12 +844,13 @@
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
                           <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Exámenes</div><div className="text-xl font-bold text-white">{stats.total}</div></div>
                           <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Nota Media</div><div className="text-xl font-bold text-blue-400">{stats.avgScore.toFixed(1)}</div></div>
-                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Acierto</div><div className="text-xl font-bold text-green-400">{stats.avgPct.toFixed(1)}%</div></div>
+                          <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Acierto Global</div><div className="text-xl font-bold text-green-400">{stats.avgGlobalHitRate.toFixed(1)}%</div></div>
                           <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">% Progreso</div><div className="text-xl font-bold text-yellow-400">{stats.avgProgress.toFixed(1)}%</div></div>
-                          <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-3 gap-2">
+                          <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-4 gap-2">
                               <div className="text-center"><div className="text-[10px] text-green-500 uppercase">Media Aciertos</div><div className="text-lg font-bold text-white">{stats.avgHits.toFixed(1)}</div></div>
                               <div className="text-center border-l border-slate-700"><div className="text-[10px] text-red-500 uppercase">Media Fallos</div><div className="text-lg font-bold text-white">{stats.avgMisses.toFixed(1)}</div></div>
                               <div className="text-center border-l border-slate-700"><div className="text-[10px] text-blue-500 uppercase">Media Omisiones</div><div className="text-lg font-bold text-white">{stats.avgSkips.toFixed(1)}</div></div>
+                              <div className="text-center border-l border-slate-700"><div className="text-[10px] text-indigo-400 uppercase font-bold">Media Netas</div><div className="text-lg font-bold text-indigo-300">{stats.avgNetas.toFixed(1)}</div></div>
                           </div>
                       </div>
                   )}
@@ -861,8 +863,9 @@
                                       <th className="p-4">Materia</th>
                                       <th className="p-4 text-center">Puntos</th>
                                       <th className="p-4 text-center">Nota %</th>
+                                      <th className="p-4 text-center">% Acierto</th>
                                       <th className="p-4 text-center">Progreso</th>
-                                      <th className="p-4 text-right">Detalle (A/F/O)</th>
+                                      <th className="p-4 text-right">Detalle (A/F/O) [Net]</th>
                                       <th className="p-4 text-right">Acción</th>
                                   </tr>
                               </thead>
@@ -870,14 +873,20 @@
                                   {results.map((r, i) => {
                                       const answeredTotal = r.hits + r.misses + r.skips;
                                       const progressPct = ((answeredTotal / r.total) * 100).toFixed(1);
+                                      const globalHitRate = ((r.hits / r.total) * 100).toFixed(1);
+                                      const netas = r.hits - r.misses;
                                       return (
                                           <tr key={i} className="hover:bg-slate-800/30">
                                               <td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td>
                                               <td className="p-4 font-bold text-white truncate max-w-[200px]">{r.subjectName}</td>
                                               <td className="p-4 text-center font-bold text-blue-400">{r.score.toFixed(1)}</td>
                                               <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span></td>
+                                              <td className="p-4 text-center font-mono text-green-400 font-bold">{globalHitRate}%</td>
                                               <td className="p-4 text-center text-xs text-slate-400">{answeredTotal} / {r.total} <span className="font-bold text-white">({progressPct}%)</span></td>
-                                              <td className="p-4 text-right text-xs font-mono"><span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span></td>
+                                              <td className="p-4 text-right text-xs font-mono">
+                                                  <span className="text-green-400">{r.hits}</span> / <span className="text-red-400">{r.misses}</span> / <span className="text-blue-400">{r.skips}</span>
+                                                  <span className="text-indigo-300 font-bold ml-2">[Net: {netas}]</span>
+                                              </td>
                                               <td className="p-4 text-right"><button onClick={() => onDeleteOne(i)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50 transition-colors"><Icons.Trash2 size={16}/></button></td>
                                           </tr>
                                       )

@@ -84,7 +84,11 @@
         Globe: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></IconBase>,
         HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>,
         Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>,
-        Wand: (p) => <IconBase {...p}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2L11 5"/></IconBase>
+        Wand: (p) => <IconBase {...p}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2L11 5"/></IconBase>,
+        Users: (p) => <IconBase {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>,
+        Link: (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></IconBase>,
+        Calendar: (p) => <IconBase {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></IconBase>,
+        Target: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></IconBase>
       };
 
       // --- BASE DE DATOS (PDFs) ---
@@ -177,15 +181,23 @@
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           let contextInstruction = "";
+          
           if (sourceConfig.type === 'pdf') {
               contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${sourceConfig.content.substring(0, 950000)} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
+          } else if (sourceConfig.type === 'official') {
+              contextInstruction = `
+                CONTEXTO: EXAMEN OFICIAL (AÑO/CONVOCATORIA: ${sourceConfig.name}). URL REF: ${sourceConfig.url || 'No disponible'}.
+                INSTRUCCIÓN CRÍTICA: Debes intentar rescatar preguntas REALES que aparecieron en este examen oficial o simulacros muy fieles.
+                Si no tienes acceso literal a las preguntas de esa URL, genera preguntas que simulen exactamente el estilo, dificultad y temática de esa convocatoria específica.
+              `;
           } else {
               contextInstruction = `Temas a tratar (Búsqueda General / Internet): ${subject.topics.map(t => `${t.name} (${t.pct}%)`).join(', ')}. INSTRUCCIÓN: Usa tu conocimiento general para generar preguntas sobre estos temas.`;
           }
+          
           const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
           const rawText = await askGemini(apiKey, prompt);
           const parsed = extractJSON(rawText);
-          return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : `[Internet]` }));
+          return parsed.map(q => ({ ...q, origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : sourceConfig.type === 'official' ? `[OFICIAL]` : `[Internet]` }));
       };
 
       const formatTime = (seconds) => {
@@ -304,20 +316,29 @@
           const [searchingDesc, setSearchingDesc] = useState(false);
           const [descResults, setDescResults] = useState([]);
           const [generatingTopics, setGeneratingTopics] = useState(false);
+          const [searchingLastCall, setSearchingLastCall] = useState(false);
           
           const defaultSubject = { 
               id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
               pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, 
-              topics: [{ name: 'Temario General', pct: 100 }], files: [] 
+              topics: [{ name: 'Temario General', pct: 100 }], files: [],
+              lastCall: { date: '', url: '', seats: '', cutOff: '', examUrl: '', useExam: false, examPct: 0 } 
           };
 
           const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
-          const handleEdit = (sub) => { const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; setEditForm(safeSub); setIsEditing(true); };
+          const handleEdit = (sub) => { 
+              const safeSub = { ...defaultSubject, ...sub, files: sub.files || [], 
+              lastCall: { ...defaultSubject.lastCall, ...(sub.lastCall || {}) } }; 
+              setEditForm(safeSub); setIsEditing(true); 
+          };
 
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
-              if (totalPdfPct > 100) return alert(`El porcentaje total de los PDFs (${totalPdfPct}%) excede el 100%.`);
+              const officialPct = editForm.lastCall.useExam ? (parseFloat(editForm.lastCall.examPct) || 0) : 0;
+              
+              if ((totalPdfPct + officialPct) > 100) return alert(`El porcentaje total (PDFs ${totalPdfPct}% + Oficial ${officialPct}%) excede el 100%.`);
+              
               setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
               if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
           };
@@ -413,9 +434,54 @@
               } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
           };
 
+          const handleSearchLastCall = async () => {
+              const apiKey = window.localStorage.getItem('gemini_api_key');
+              if(!apiKey) return alert("Configura la API Key primero");
+              if(!editForm.type) return alert("Rellena la descripción de la materia primero.");
+              
+              setSearchingLastCall(true);
+              const prompt = `Busca información detallada sobre la ÚLTIMA convocatoria oficial publicada (BOE, boletines autonómicos, etc.) para la oposición: "${editForm.type}".
+              Necesito 5 datos exactos: 
+              1. Fecha de la convocatoria (YYYY-MM-DD).
+              2. Enlace oficial a la convocatoria (BOE/Web Organismo).
+              3. Número de plazas ofertadas.
+              4. Nota de corte del último examen (especifica si es puntos o porcentaje).
+              5. Enlace directo al PDF del cuadernillo de preguntas del último examen (si existe).
+              
+              Devuelve ÚNICAMENTE un JSON con este formato: {"date": "...", "url": "...", "seats": "...", "cutOff": "...", "examUrl": "..."}.
+              Si no encuentras algún dato, déjalo vacío ("").`;
+              
+              try {
+                  const res = await askGemini(JSON.parse(apiKey), prompt);
+                  let data = extractJSON(res);
+                  if (Array.isArray(data)) data = data[0]; 
+                  
+                  if(data) {
+                      setEditForm(prev => ({
+                          ...prev,
+                          lastCall: {
+                              ...prev.lastCall,
+                              date: data.date || '',
+                              url: data.url || '',
+                              seats: data.seats || '',
+                              cutOff: data.cutOff || '',
+                              examUrl: data.examUrl || ''
+                          }
+                      }));
+                  } else {
+                      alert("No se encontró información detallada.");
+                  }
+              } catch(e) { 
+                  alert("Error al buscar convocatoria: " + e.message); 
+              } finally { 
+                  setSearchingLastCall(false); 
+              }
+          };
+
           if (isEditing) {
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
-              const internetPct = Math.max(0, 100 - totalPdfPct);
+              const officialPct = editForm.lastCall.useExam ? (parseFloat(editForm.lastCall.examPct) || 0) : 0;
+              const internetPct = Math.max(0, 100 - totalPdfPct - officialPct);
               const topicsTotal = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
 
               return (
@@ -477,7 +543,7 @@
                                   </label>
                               </div>
                               <div className="space-y-2 mb-4">
-                                  {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos. Todo el examen se basará en Internet.</div>}
+                                  {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos.</div>}
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
                                           <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
@@ -496,10 +562,63 @@
                               </div>
                               <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
                                   <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
-                                  <div className="flex items-center gap-4 text-xs font-mono">
-                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span>
+                                  <div className="flex items-center gap-2 text-xs font-mono">
+                                      <span className="text-blue-400">PDFs: {totalPdfPct}%</span>
                                       <span className="text-slate-600">|</span>
-                                      <span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
+                                      <span className={editForm.lastCall.useExam ? "text-indigo-400" : "text-slate-600"}>Oficial: {officialPct}%</span>
+                                      <span className="text-slate-600">|</span>
+                                      <span className="text-green-400">Internet: {internetPct}%</span>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="glass-panel p-6 rounded-xl mb-6 bg-indigo-900/10 border-indigo-500/30">
+                              <div className="flex justify-between items-center mb-4">
+                                  <h4 className="text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria</h4>
+                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall || !editForm.type} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">
+                                      {searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Search size={14}/>} Auto-Buscar Datos
+                                  </button>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                  <div>
+                                      <label className="text-xs text-slate-400 block mb-1">Fecha</label>
+                                      <input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.date || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, date: e.target.value}})} />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs text-slate-400 block mb-1">Plazas</label>
+                                      <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.seats || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, seats: e.target.value}})} placeholder="Ej: 150 Libres" />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs text-slate-400 block mb-1">Nota de Corte</label>
+                                      <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.lastCall?.cutOff || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, cutOff: e.target.value}})} placeholder="Ej: 65% o 32 puntos" />
+                                  </div>
+                              </div>
+                              
+                              <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
+                                  <label className="text-xs text-indigo-400 font-bold block mb-2 uppercase">Examen Oficial Anterior</label>
+                                  <div className="flex gap-2 items-center mb-3">
+                                      <div className="flex-1 relative">
+                                          <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white text-xs pl-8 truncate" value={editForm.lastCall?.examUrl || ''} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examUrl: e.target.value}})} placeholder="URL del PDF del examen..." />
+                                          <div className="absolute left-2.5 top-2 text-slate-500"><Icons.Link size={14}/></div>
+                                      </div>
+                                      {editForm.lastCall?.examUrl && (
+                                          <a href={editForm.lastCall.examUrl} target="_blank" className="bg-red-600 hover:bg-red-500 text-white p-2 rounded flex items-center gap-1 text-xs font-bold" title="Abrir PDF">
+                                              <Icons.FileText size={14}/> Ver
+                                          </a>
+                                      )}
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input type="checkbox" checked={editForm.lastCall?.useExam || false} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, useExam: e.target.checked}})} className="w-4 h-4 accent-indigo-500"/>
+                                          <span className="text-xs text-white">Incluir en simulacros</span>
+                                      </label>
+                                      {editForm.lastCall?.useExam && (
+                                          <div className="flex items-center gap-2">
+                                               <span className="text-xs text-slate-400">Peso:</span>
+                                               <input type="number" className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-xs text-white" value={editForm.lastCall?.examPct || 0} onChange={e => setEditForm({...editForm, lastCall: {...editForm.lastCall, examPct: parseFloat(e.target.value)}})} />
+                                               <span className="text-xs text-white">%</span>
+                                          </div>
+                                      )}
                                   </div>
                               </div>
                           </div>
@@ -560,7 +679,13 @@
                                   {fileCount > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {fileCount} PDF(s)</div>}
                                   <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div>{activeSubjectId === sub.id && <div className="bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase">Seleccionada</div>}</div>
                                   <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                                  <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
+                                  {sub.lastCall?.date && (
+                                      <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between items-center text-[10px] text-indigo-300">
+                                          <span className="flex items-center gap-1"><Icons.Calendar size={10}/> {new Date(sub.lastCall.date).toLocaleDateString()}</span>
+                                          {sub.lastCall.seats && <span className="font-bold">{sub.lastCall.seats} Plazas</span>}
+                                      </div>
+                                  )}
+                                  <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100 absolute bottom-4 right-4"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
                               </div>
                            )
                       })}
@@ -595,13 +720,35 @@
               const totalQs = activeSubject.qCount;
               const files = activeSubject.files || [];
               const totalPdfPct = files.reduce((s,f) => s + (f.pct||0), 0);
+              
+              // New Logic: Official Exam Percentage
+              const useOfficial = activeSubject.lastCall?.useExam;
+              const officialPct = useOfficial ? (activeSubject.lastCall.examPct || 0) : 0;
+              
               let plan = []; 
+              // 1. PDFs
               files.forEach(f => {
                   const count = Math.round((f.pct / 100) * totalQs);
                   if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count });
               });
-              const internetCount = totalQs - plan.reduce((s,p) => s + p.count, 0); 
+              
+              // 2. Official Exam
+              const officialCount = Math.round((officialPct / 100) * totalQs);
+              if (officialCount > 0) {
+                  plan.push({ 
+                      type: 'official', 
+                      id: 'official_exam', 
+                      name: activeSubject.lastCall.date, 
+                      url: activeSubject.lastCall.examUrl,
+                      count: officialCount 
+                  });
+              }
+
+              // 3. Internet (Remainder)
+              const assignedCount = plan.reduce((s,p) => s + p.count, 0);
+              const internetCount = Math.max(0, totalQs - assignedCount); 
               if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: internetCount });
+              
               let queue = [];
               plan.forEach(source => {
                   let remain = source.count;
@@ -615,7 +762,7 @@
               isFetchingRef.current = true;
               const nextBatch = batchQueue[0]; 
               try {
-                  let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '' };
+                  let sourceConfig = { type: nextBatch.type, name: nextBatch.name, url: nextBatch.url || '', content: '' };
                   if (nextBatch.type === 'pdf') { sourceConfig.content = await getFromDB(nextBatch.id); }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
@@ -632,7 +779,7 @@
               isFetchingRef.current = true;
               try {
                   const firstBatch = queue[0];
-                  let sc = { type: firstBatch.type, name: firstBatch.name, content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
+                  let sc = { type: firstBatch.type, name: firstBatch.name, url: firstBatch.url || '', content: firstBatch.type === 'pdf' ? await getFromDB(firstBatch.id) : '' };
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
                   updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
               } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
@@ -678,6 +825,24 @@
                           <div className="flex justify-center gap-4 mb-8">
                                {activeSubject.files?.length > 0 ? <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div> : <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg text-sm text-slate-400 flex items-center gap-2"><Icons.Globe size={18}/> Solo Internet</div>}
                           </div>
+                          {activeSubject.lastCall?.date && (
+                              <div className="mb-8 p-4 bg-indigo-900/20 border border-indigo-500/30 rounded-xl text-left grid grid-cols-2 gap-4">
+                                  <div>
+                                      <div className="text-[10px] text-indigo-400 uppercase font-bold mb-1">Última Convocatoria</div>
+                                      <div className="text-white font-bold text-sm">{new Date(activeSubject.lastCall.date).toLocaleDateString()}</div>
+                                      <div className="text-xs text-indigo-200">{activeSubject.lastCall.seats} Plazas</div>
+                                  </div>
+                                  <div className="text-right">
+                                      <div className="text-[10px] text-indigo-400 uppercase font-bold mb-1">Corte Anterior</div>
+                                      <div className="text-white font-bold text-sm">{activeSubject.lastCall.cutOff || 'N/D'}</div>
+                                      {activeSubject.lastCall.examUrl && (
+                                          <a href={activeSubject.lastCall.examUrl} target="_blank" className="mt-1 inline-flex items-center gap-1 bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] text-white font-bold">
+                                              <Icons.FileText size={10}/> Ver PDF Examen
+                                          </a>
+                                      )}
+                                  </div>
+                              </div>
+                          )}
                           {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm animate-pulse-error">{error}</div>}
                           <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
                       </div>
@@ -825,16 +990,12 @@
                                  <h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.BarChart3 size={24} className="text-blue-500"/> Evolución</h3>
                                  <button onClick={() => updateState({ showGraph: false })} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button>
                              </div>
-                             {/* Componente Gráfico simple integrado aquí para evitar problemas de dependencias */}
                              <div className="flex-1 overflow-x-auto custom-scrollbar border border-slate-800 rounded-lg bg-black/30 p-4">
                                   {history.length > 0 ? (
                                     <div style={{minWidth: `${Math.max(600, history.length * 60)}px`, height: '400px', position: 'relative'}}>
                                        <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(600, history.length * 60)} 400`} preserveAspectRatio="none">
-                                            {/* Ejes y líneas guía */}
                                             <line x1="40" y1="360" x2="100%" y2="360" stroke="#475569" strokeWidth="2" />
                                             <line x1="40" y1="40" x2="40" y2="360" stroke="#475569" strokeWidth="2" />
-                                            
-                                            {/* Media Line (Dashed) */}
                                             {(() => {
                                                 const maxScore = Math.max(...history.map(h => h.score), 10) * 1.1;
                                                 const avgY = 360 - ((session.graphAvg / maxScore) * 320);
@@ -845,8 +1006,6 @@
                                                     </g>
                                                 )
                                             })()}
-
-                                            {/* Barras */}
                                             {history.slice().reverse().map((h, i) => {
                                                 const maxScore = Math.max(...history.map(item => item.score), 10) * 1.1;
                                                 const barHeight = (h.score / maxScore) * 320;

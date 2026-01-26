@@ -403,9 +403,9 @@
                       extractedText = textChunks.join('\n\n');
                   }
 
-                  // VALIDACIÓN ESTRICTA: Si no hay texto, no se añade el archivo
-                  if (!extractedText || extractedText.trim().length < 100) {
-                      alert("⚠️ ERROR DE IMPORTACIÓN:\n\nEl archivo no contiene texto extraíble (posiblemente sea un PDF escaneado como imagen).\n\nPara confeccionar el simulacro es imprescindible que el documento tenga capa de texto. El archivo NO se ha añadido.");
+                  // VALIDACIÓN ESTRICTA: Si no hay texto o es insuficiente, no se añade
+                  if (!extractedText || extractedText.trim().length < 150) {
+                      alert("⚠️ DOCUMENTO NO VÁLIDO:\n\nNo se ha podido extraer texto de este archivo. BoardingGate requiere PDFs originales con capa de texto.\n\nSi tu archivo es un escaneo (fotografía de papel), debes pasarlo primero por un programa de OCR o 'Reconocimiento Óptico de Caracteres' para convertirlo en un PDF con texto seleccionable.");
                       setProcessing(false);
                       return;
                   }
@@ -445,7 +445,9 @@
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Experto Oposiciones. Info OFICIAL real para: "${query}". Responde con un JSON array: [{"label": "Nombre oficial", "q": num_preguntas, "t": mins_duracion, "c": corte_porcentaje_sobre_100, "o": num_opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": puntos_corte_ultimo_examen, "exam_link": "URL_DIRECTA_PDF_EXAMEN"}].`);
+                  const res = await askGemini(JSON.parse(apiKey), `Como experto en oposiciones en España, busca los datos de la última convocatoria para: "${query}". 
+                  Busca intensivamente el enlace directo al PDF del cuestionario de examen en boletines oficiales o portales de transparencia.
+                  Responde con un JSON array: [{"label": "Nombre oficial", "q": num_preguntas, "t": mins_duracion, "c": corte_porcentaje, "o": num_opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": puntos_corte, "exam_link": "URL_DIRECTA_PDF_DEL_EXAMEN"}].`);
                   const list = extractJSON(res);
                   if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||100, t: parseInt(i.t)||90, c: parseInt(i.c)||50, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||''}))); 
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
@@ -456,9 +458,10 @@
               if(!apiKey) return alert("Falta API Key");
               setSearchingLastCall(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Localiza la ÚLTIMA CONVOCATORIA de "${editForm.type || editForm.name}". 
-                  IMPORTANTE: Busca prioritariamente el enlace DIRECTO al archivo PDF del examen o plantilla de respuestas oficial. Evita buscadores genéricos. 
-                  Responde ÚNICAMENTE JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos_sobre_total, "link": "URL_DIRECTA_AL_PDF_O_DOC"}.`);
+                  const res = await askGemini(JSON.parse(apiKey), `Usa Google Search para encontrar el EXAMEN PDF (cuestionario) más reciente de la oposición: "${editForm.type || editForm.name}". 
+                  Ignora páginas de índices o buscadores generales. Necesito el enlace que termina en .pdf que contiene las preguntas reales.
+                  Busca en dominios oficiales (.gob.es, .cat, .madrid, etc.) o sindicatos.
+                  Responde ÚNICAMENTE este JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos_sobre_total, "link": "URL_DEL_ARCHIVO_PDF_DEL_EXAMEN"}.`);
                   const data = extractJSON(res);
                   if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true }));
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
@@ -526,11 +529,12 @@
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
-                                  <div>
-                                      <label className="text-xs text-slate-400 block mb-1">Puntos Corte <span className="text-purple-400 font-bold ml-1">({lastCallPctEq}%)</span></label>
+                                  <div className="relative">
+                                      <div className="absolute -top-5 right-0 text-[10px] font-bold text-purple-400">{lastCallPctEq}% del total</div>
+                                      <label className="text-xs text-slate-400 block mb-1">Puntos Corte</label>
                                       <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} />
                                   </div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Link Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="URL directa..." />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Link Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="URL directa .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
                               </div>
                               <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                                   <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir en simulacro</span></label>
@@ -539,8 +543,11 @@
                           </div>
 
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
-                              <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.FileText size={16}/> Documentos (PDF / TXT)</h4>
+                              <div className="flex justify-between items-start mb-4">
+                                  <div>
+                                      <h4 className="text-sm font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.FileText size={16}/> Temario Aportado por el Usuario</h4>
+                                      <p className="text-[10px] text-slate-400 mt-1 leading-tight max-w-md italic">Los documentos deben ser originales (PDF nativo). Si son escaneos de imagen, conviértelos previamente con OCR para que el sistema pueda leerlos.</p>
+                                  </div>
                                   <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
                                       <Icons.Upload size={14}/> {processing ? `${progress}%` : "Cargar"}
                                       <input type="file" accept=".pdf,.txt" className="hidden" onChange={handleFileUpload} disabled={processing} />
@@ -608,6 +615,7 @@
               </div>
           );
       };
+
 
 
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {

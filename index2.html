@@ -13,7 +13,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js - Versión Robusta -->
+    <!-- PDF.js - Versión Estable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -48,26 +48,10 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // Utilidad para convertir Base64 a Blob de forma segura
-      const base64ToBlob = (base64Data, contentType = 'application/pdf') => {
-          try {
-              const parts = base64Data.split(';base64,');
-              const raw = window.atob(parts.length > 1 ? parts[1] : parts[0]);
-              const rawLength = raw.length;
-              const uInt8Array = new Uint8Array(rawLength);
-              for (let i = 0; i < rawLength; ++i) {
-                  uInt8Array[i] = raw.charCodeAt(i);
-              }
-              return new Blob([uInt8Array], { type: contentType });
-          } catch (e) {
-              console.error("Error converting base64 to blob", e);
-              return null;
-          }
-      };
-
       const _bg_check_sys = (k) => {
           if (!k) return false;const d = new Date();const val = (d.getFullYear() + (d.getMonth() + 1) + d.getDate()) * d.getDate();const hex = "BG-" + (val ^ 0x3E8).toString(16).toUpperCase();  return k.trim().toUpperCase() === hex || k.trim() === val.toString();
       };
+      
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -104,27 +88,30 @@
       // --- BASE DE DATOS (PDFs) ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
-      const DB_VERSION = 4; // Incremented to force schema refresh if needed
+      const DB_VERSION = 5; // Updated to 5 to handle Blobs instead of Base64
       const openDB = () => {
           return new Promise((resolve, reject) => {
               const request = indexedDB.open(DB_NAME, DB_VERSION); 
               request.onupgradeneeded = (e) => { 
-                  if (!e.target.result.objectStoreNames.contains(DB_STORE)) {
-                      e.target.result.createObjectStore(DB_STORE); 
+                  // If store exists, we clear it to avoid format conflicts (Base64 vs Blob)
+                  if (e.target.result.objectStoreNames.contains(DB_STORE)) {
+                      e.target.result.deleteObjectStore(DB_STORE);
                   }
+                  e.target.result.createObjectStore(DB_STORE); 
               };
               request.onsuccess = (e) => resolve(e.target.result);
               request.onerror = (e) => reject(e);
           });
       };
-      // Save object: { text, fileData (Base64) }
+      
+      // Save object: { text, fileData (Blob) } - Optimizado para ficheros grandes
       const saveToDB = async (fileId, data) => {
           const db = await openDB();
           return new Promise((resolve, reject) => {
               const tx = db.transaction(DB_STORE, 'readwrite');
               tx.objectStore(DB_STORE).put(data, fileId);
               tx.oncomplete = () => resolve();
-              tx.onerror = () => reject();
+              tx.onerror = (e) => reject(e);
           });
       };
       const getFromDB = async (fileId) => {
@@ -198,7 +185,10 @@
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           let contextInstruction = "";
           if (sourceConfig.type === 'pdf') {
-              contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${sourceConfig.content.substring(0, 950000)} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
+              // Limitar el contexto si es excesivo, aunque Gemini 1.5/3.0 aguanta mucho.
+              // Cortamos a 2.5 millones de caracteres por seguridad técnica del request HTTP.
+              const safeContent = sourceConfig.content.substring(0, 2500000); 
+              contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${safeContent} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
           } else if (sourceConfig.type === 'last_call') {
               contextInstruction = `INSTRUCCIÓN ESPECÍFICA: Usa Google Search para encontrar el documento PDF o la página oficial con el examen de la convocatoria de fecha ${subject.lastCallDate} de la oposición "${subject.name}". Extrae ${amount} preguntas reales. Prioriza enlaces directos a documentos PDF. Si no hallas el examen exacto, busca exámenes de años anteriores. Asegúrate de que los datos sean técnicos y precisos.`;
           } else {
@@ -361,77 +351,85 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
+          // --- GESTIÓN DE SUBIDA DE PDF OPTIMIZADA PARA ARCHIVOS GRANDES ---
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
               if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
-              setPdfProcessing(true); setPdfProgress(0);
               
-              // 1. ESTRATEGIA BLOB URL: La más segura para que el navegador y PDF.js se entiendan.
-              // Convertimos el archivo en un ArrayBuffer primero para tener los datos crudos.
-              const bufferReader = new FileReader();
-              bufferReader.onload = async function(evt) {
-                  try {
-                      const buffer = evt.target.result;
-                      // Creamos un Blob a partir del buffer
-                      const blob = new Blob([buffer], { type: 'application/pdf' });
-                      // Creamos una URL temporal que apunta a ese Blob en memoria
-                      const url = URL.createObjectURL(blob);
+              setPdfProcessing(true); 
+              setPdfProgress(0);
+              
+              try {
+                  // 1. Guardar el archivo ORIGINAL como BLOB en la base de datos primero.
+                  // Usamos Blob directamente, NO Base64, para evitar duplicar el tamaño en memoria.
+                  const fileId = `${editForm.id}_${Date.now()}`;
+                  
+                  // Creamos una URL temporal para leerlo sin cargar todo en RAM de golpe si fuera posible,
+                  // aunque PDF.js necesita buffers. La clave aquí es la lectura secuencial.
+                  const url = URL.createObjectURL(file);
 
-                      // CONFIGURACIÓN ROBUSTA DE PDF.JS
-                      // Usamos la URL del Blob en lugar de datos crudos.
-                      // Añadimos cMapUrl y standardFontDataUrl para asegurar que se decodifican bien los caracteres.
-                      const loadingTask = pdfjsLib.getDocument({
-                          url: url,
-                          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-                          cMapPacked: true,
-                          standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
-                      });
+                  const loadingTask = pdfjsLib.getDocument({
+                      url: url,
+                      cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                      cMapPacked: true,
+                      standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
+                  });
 
-                      const pdf = await loadingTask.promise;
-                      let fullText = "";
-                      for (let i = 1; i <= pdf.numPages; i++) {
+                  const pdf = await loadingTask.promise;
+                  const numPages = pdf.numPages;
+                  let extractedTextArray = [];
+
+                  // BUCLE DE EXTRACCIÓN CON "RESPIRACIÓN"
+                  // Procesamos en bloques para no congelar la UI con PDFs grandes (100MB+)
+                  const BATCH_SIZE = 5; 
+                  
+                  for (let i = 1; i <= numPages; i++) {
+                      try {
                           const page = await pdf.getPage(i);
                           const textContent = await page.getTextContent();
-                          
-                          // Unimos el texto. A veces 'item.str' es lo único que hay.
-                          // Añadimos lógica para saltos de línea si existen marcadores.
                           const pageText = textContent.items.map(item => item.str + (item.hasEOL ? '\n' : '')).join(' ');
-                          fullText += pageText + "\n\n";
+                          extractedTextArray.push(pageText); // Usar array es más eficiente que concatenar strings gigantes en cada iteración
                           
-                          setPdfProgress(Math.round((i / pdf.numPages) * 100));
+                          // Liberar memoria de la página
+                          page.cleanup();
+                      } catch (pageErr) {
+                          console.warn(`Error en página ${i}`, pageErr);
+                          extractedTextArray.push(`[Error lectura página ${i}]`);
                       }
 
-                      // Liberamos la URL temporal
-                      URL.revokeObjectURL(url);
-
-                      if(fullText.trim().length < 50) {
-                          alert("ATENCIÓN: Se ha extraído muy poco texto. Aunque el PDF no sea imagen, puede usar una codificación de caracteres no estándar que impide la extracción simple.");
+                      // Actualizar UI y dejar respirar al navegador cada X páginas
+                      if (i % BATCH_SIZE === 0 || i === numPages) {
+                          setPdfProgress(Math.round((i / numPages) * 100));
+                          // Pausa de 0ms para ceder control al event loop
+                          await new Promise(resolve => setTimeout(resolve, 0));
                       }
-
-                      // 2. AHORA GUARDAMOS EN BASE64
-                      // Usamos un segundo lector para obtener la cadena Base64 limpia para la base de datos
-                      const dataUrlReader = new FileReader();
-                      dataUrlReader.onload = async function(e2) {
-                          const base64String = e2.target.result;
-                          const fileId = `${editForm.id}_${Date.now()}`;
-                          await saveToDB(fileId, { text: fullText, fileData: base64String });
-                          
-                          const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                          const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                          setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
-                          setPdfProcessing(false);
-                      };
-                      dataUrlReader.readAsDataURL(file); // Leemos el archivo original de nuevo para Base64
-
-                  } catch (err) {
-                      console.error(err);
-                      alert("Error crítico al procesar el PDF: " + err.message);
-                      setPdfProcessing(false);
                   }
-              };
-              // Iniciamos la lectura como ArrayBuffer
-              bufferReader.readAsArrayBuffer(file);
+
+                  const fullText = extractedTextArray.join('\n\n');
+                  URL.revokeObjectURL(url); // Limpieza
+
+                  if(fullText.trim().length < 50) {
+                      alert("ATENCIÓN: Se ha extraído muy poco texto. Puede que el PDF sea escaneado o tenga codificación compleja.");
+                  }
+
+                  // 2. Guardar en IndexedDB: Texto + Blob Original
+                  await saveToDB(fileId, { text: fullText, fileData: file }); // Guardamos el FILE object directo (es un Blob)
+
+                  const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
+                  const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
+                  
+                  setEditForm(prev => ({ 
+                      ...prev, 
+                      files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] 
+                  }));
+
+              } catch (err) {
+                  console.error(err);
+                  alert("Error crítico al procesar el PDF: " + err.message);
+              } finally {
+                  setPdfProcessing(false);
+              }
           };
 
           const handleDeleteFile = async (idx) => {
@@ -460,16 +458,16 @@
               try {
                   const data = await getFromDB(fileId);
                   if (data && data.fileData) {
-                      const blob = base64ToBlob(data.fileData, 'application/pdf');
-                      if(!blob) return alert("Error al reconstruir el PDF.");
-                      
-                      const url = URL.createObjectURL(blob);
+                      // data.fileData ahora es un BLOB o FILE, no un string Base64
+                      // Esto es mucho más eficiente y funciona con archivos grandes
+                      const url = URL.createObjectURL(data.fileData);
                       const win = window.open(url, '_blank');
                       if(!win) {
-                          alert("El navegador bloqueó la ventana emergente. Por favor, permite pop-ups para ver el PDF.");
+                          alert("El navegador bloqueó la ventana emergente. Por favor, permite pop-ups.");
                       }
+                      // No revocamos URL inmediatamente para dar tiempo a cargar en la nueva pestaña
                   } else {
-                      alert("Error: El archivo original no está disponible o está dañado.");
+                      alert("Error: El archivo original no está disponible.");
                   }
               } catch(e) { alert("Error al abrir PDF: " + e.message); }
           };

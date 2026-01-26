@@ -310,14 +310,19 @@
           );
       };
 
+
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
           const [pdfProcessing, setPdfProcessing] = useState(false);
           const [pdfProgress, setPdfProgress] = useState(0);
+          
+          // Estados de búsqueda
           const [searchingDesc, setSearchingDesc] = useState(false);
+          const [searchingLastCall, setSearchingLastCall] = useState(false); // <--- NUEVO ESTADO
           const [descResults, setDescResults] = useState([]);
           const [generatingTopics, setGeneratingTopics] = useState(false);
+          
           const [viewingPdf, setViewingPdf] = useState(null);
           const [pdfContent, setPdfContent] = useState('');
           
@@ -351,7 +356,7 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
-
+          // --- MOTOR DE EXTRACCIÓN OPTIMIZADO (INCLUIDO FIX 150MB) ---
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
@@ -359,93 +364,42 @@
               
               setPdfProcessing(true); 
               setPdfProgress(0);
-              
               const fileId = `${editForm.id}_${Date.now()}`;
               
               try {
-                  // Usamos URL del Blob para no cargar el archivo entero en memoria JS
                   const url = URL.createObjectURL(file);
-
                   const loadingTask = pdfjsLib.getDocument({
                       url: url,
                       cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
                       cMapPacked: true,
-                      // OPTIMIZACIONES CLAVE PARA ARCHIVOS GRANDES:
-                      disableAutoFetch: true,  // No intentar descargar todo de golpe
-                      disableStream: true,     // Leer por rangos
-                      disableFontFace: true,   // No procesar fuentes (ahorra mucha CPU/RAM)
-                      nativeImageDecoderSupport: 'none' // No decodificar imágenes (solo queremos texto)
+                      disableAutoFetch: true, disableStream: true, disableFontFace: true, nativeImageDecoderSupport: 'none'
                   });
-
                   const pdf = await loadingTask.promise;
                   const numPages = pdf.numPages;
-                  
-                  // Usamos un Array en lugar de String para evitar "Reallocations" de memoria costosas
                   let textChunks = [];
 
-                  // Procesamos página a página
                   for (let i = 1; i <= numPages; i++) {
                       try {
-                          // Obtener página
                           const page = await pdf.getPage(i);
-                          
-                          // Extraer contenido de texto
-                          // normalizeWhitespace ayuda a limpiar espacios extraños
                           const textContent = await page.getTextContent({ normalizeWhitespace: true });
-                          
-                          // Mapear solo los strings, ignorando coordenadas y transformaciones
                           const pageStrings = textContent.items.map(item => item.str);
-                          
-                          // Si la página tiene contenido, lo añadimos al array
-                          if (pageStrings.length > 0) {
-                              textChunks.push(pageStrings.join(' '));
-                          }
-                          
-                          // LIBERAR MEMORIA INMEDIATAMENTE
-                          // Esto es vital para PDFs de 150MB en el navegador
+                          if (pageStrings.length > 0) textChunks.push(pageStrings.join(' '));
                           page.cleanup(); 
-                          
-                      } catch (pageErr) {
-                          console.warn(`Saltando página ${i} por error de lectura:`, pageErr);
-                          // No detenemos el proceso, seguimos con la siguiente
-                      }
-
-                      // Actualizar UI cada 5 páginas para no bloquear el navegador visualmente
+                      } catch (pageErr) { console.warn(`Error pág ${i}`, pageErr); }
                       if (i % 5 === 0 || i === numPages) {
                           setPdfProgress(Math.round((i / numPages) * 100));
-                          await new Promise(r => setTimeout(r, 0)); // Ceder control al Event Loop
+                          await new Promise(r => setTimeout(r, 0)); 
                       }
                   }
-
-                  // Unir todo el texto al final del proceso
                   const fullText = textChunks.join('\n\n');
-                  
-                  // Limpiar referencia URL
                   URL.revokeObjectURL(url); 
-
-                  if (fullText.length < 50) {
-                      alert("Advertencia: El sistema ha leído el archivo pero ha encontrado muy poco texto. Verifica que no sean imágenes incrustadas.");
-                  }
-
-                  // Guardar en IndexedDB (Base de datos del navegador)
-                  // Guardamos el texto extraído y el archivo original
+                  if (fullText.length < 50) alert("Advertencia: Poco texto detectado. Verifique si es un PDF de imagen.");
                   await saveToDB(fileId, { text: fullText, fileData: file }); 
 
-                  // Calcular pesos y actualizar estado
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  
-                  setEditForm(prev => ({ 
-                      ...prev, 
-                      files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] 
-                  }));
-
-              } catch (err) {
-                  console.error(err);
-                  alert(`Error procesando PDF: ${err.message}. \n\nIntente dividir el archivo si el error persiste.`);
-              } finally {
-                  setPdfProcessing(false);
-              }
+                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
+              } catch (err) { alert(`Error: ${err.message}`); } finally { setPdfProcessing(false); }
           };
 
           const handleDeleteFile = async (idx) => {
@@ -458,86 +412,78 @@
           const handleViewPdfText = async (fileId) => {
               try {
                   const data = await getFromDB(fileId);
-                  if(data && data.text && data.text.trim().length > 0) {
-                      setPdfContent(data.text);
-                  } else {
-                      setPdfContent("⚠️ NO SE DETECTÓ TEXTO.\n\nEs probable que este PDF sea un escaneo (imagen) y no contenga capa de texto digital reconocible por el sistema.\n\nLa IA no podrá leer este documento si no tiene texto seleccionable.");
-                  }
+                  setPdfContent((data && data.text && data.text.trim().length > 0) ? data.text : "⚠️ NO SE DETECTÓ TEXTO (PDF ESCANEADO).");
                   setViewingPdf(true);
-              } catch(e) {
-                  setPdfContent("Error al recuperar contenido: " + e.message);
-                  setViewingPdf(true);
-              }
+              } catch(e) { setPdfContent("Error: " + e.message); setViewingPdf(true); }
           };
 
           const handleOpenPdfOriginal = async (fileId) => {
               try {
                   const data = await getFromDB(fileId);
-                  if (data && data.fileData) {
-                      const url = URL.createObjectURL(data.fileData);
-                      const win = window.open(url, '_blank');
-                      if(!win) {
-                          alert("El navegador bloqueó la ventana emergente. Por favor, permite pop-ups.");
-                      }
-                  } else {
-                      alert("Error: El archivo original no está disponible.");
-                  }
-              } catch(e) { alert("Error al abrir PDF: " + e.message); }
+                  if (data && data.fileData) window.open(URL.createObjectURL(data.fileData), '_blank');
+              } catch(e) { alert("Error: " + e.message); }
           };
 
+          // --- BUSCADOR GENERAL (YA EXISTENTE) ---
           const handleSearchDescription = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
               if(!editForm.name && !editForm.type) return alert("Escribe algo en nombre o descripción para buscar");
-              
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
-              
-              const prompt = `Actúa como experto en Oposiciones y Másters de España. Busca en internet la información más reciente y OFICIAL sobre: "${query}". 
-              Intenta obtener los datos técnicos del primer ejercicio o test y de la ÚLTIMA CONVOCATORIA disponible.
-              Devuelve ÚNICAMENTE un JSON array de objetos con este formato exacto: 
-              [{"label": "Nombre Oficial Oposición/Máster", "q": nº_preguntas_entero, "t": tiempo_minutos_entero, "c": nota_corte_pct_entero, "o": num_opciones_entero, "last_date": "YYYY-MM-DD", "places": num_plazas_entero, "cut_score": nota_corte_real_puntos, "exam_link": "url_examen_oficial"}]. 
-              Para "exam_link", intenta encontrar una URL directa a un PDF o una página de descarga oficial (filetype:pdf).
-              Si desconoces algún dato específico, usa estos valores por defecto: q=200, t=270, c=90, o=4, places=0.`;
-              
+              const prompt = `Actúa como experto en Oposiciones. Busca información OFICIAL sobre: "${query}". Devuelve JSON array: [{"label": "Nombre Oficial", "q": nº_preguntas, "t": minutos, "c": corte_pct, "o": opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": corte_puntos, "exam_link": "url_pdf"}].`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
-                  
-                  if(Array.isArray(list) && list.length > 0) {
-                      const safeList = list.map(item => ({
-                          label: item.label || "Desconocido",
-                          q: parseInt(item.q) || 200,
-                          t: parseInt(item.t) || 270,
-                          c: parseInt(item.c) || 90,
-                          o: parseInt(item.o) || 4,
-                          last_date: item.last_date || '',
-                          places: parseInt(item.places) || 0,
-                          cut_score: parseFloat(item.cut_score) || 0,
-                          exam_link: item.exam_link || ''
+                  if(Array.isArray(list) && list.length > 0) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||''}))); 
+                  else alert("Sin resultados.");
+              } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
+          };
+
+          // --- NUEVO: BUSCADOR ESPECÍFICO ÚLTIMA CONVOCATORIA (VARITA MÁGICA) ---
+          const handleSearchLastCall = async () => {
+              const apiKey = window.localStorage.getItem('gemini_api_key');
+              if(!apiKey) return alert("Configura la API Key primero");
+              const query = editForm.type || editForm.name;
+              if(!query) return alert("Rellena el campo 'Descripción' u 'Oposición oficial' antes de usar la varita.");
+              
+              setSearchingLastCall(true);
+              const prompt = `Actúa como experto en empleo público. Busca EXCLUSIVAMENTE los datos de la ÚLTIMA CONVOCATORIA (examen más reciente) de: "${query}".
+              Necesito: Fecha del examen, Número de Plazas, Nota de Corte (puntos) y Enlace al examen o web oficial.
+              Devuelve un ÚNICO objeto JSON: {"date": "YYYY-MM-DD", "places": numero, "cutoff": puntos_decimal, "link": "url"}. Si no encuentras algo, pon null.`;
+              
+              try {
+                  const res = await askGemini(JSON.parse(apiKey), prompt);
+                  const data = extractJSON(res);
+                  if(data) {
+                      setEditForm(prev => ({
+                          ...prev,
+                          lastCallDate: data.date || prev.lastCallDate,
+                          lastCallPlaces: data.places || prev.lastCallPlaces,
+                          lastCallCutoff: data.cutoff || prev.lastCallCutoff,
+                          lastCallLink: data.link || prev.lastCallLink,
+                          includeLastCall: true // La activamos automáticamente si encontramos datos
                       }));
-                      setDescResults(safeList);
                   } else {
-                      alert("No se encontraron resultados con el formato esperado.");
+                      alert("La IA no pudo estructurar los datos de la última convocatoria.");
                   }
               } catch(e) { 
-                  alert("Error al buscar: " + e.message); 
+                  alert("Error en búsqueda: " + e.message); 
               } finally { 
-                  setSearchingDesc(false); 
+                  setSearchingLastCall(false); 
               }
           };
 
-          const handleMagicWand = async () => {
+          const handleMagicWandTopics = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Configura la API Key primero");
-              if(!editForm.type) return alert("Rellena la descripción de la materia primero.");
+              if(!editForm.type) return alert("Rellena la descripción primero.");
               setGeneratingTopics(true);
-              const prompt = `Genera el temario oficial (o estimado si no es público) para la oposición/máster: "${editForm.type}". Devuelve un JSON array de objetos con formato: [{"name": "Título del tema", "pct": numero_entero}]. Distribuye los porcentajes ("pct") según la relevancia habitual en exámenes, sumando 100% en total. Si no sabes los pesos exactos, distribuye equitativamente. Máximo 20 temas.`;
+              const prompt = `Genera temario oficial para: "${editForm.type}". JSON array: [{"name": "Tema", "pct": entero_peso}]. Máx 20 temas.`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
-                  if(Array.isArray(list) && list.length > 0) { setEditForm(prev => ({ ...prev, topics: list })); } 
-                  else alert("No se pudo generar el temario.");
+                  if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list }));
               } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
           };
 
@@ -546,7 +492,6 @@
               const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
               const internetPct = Math.max(0, 100 - totalPdfPct - lastCallWeight);
               const topicsTotal = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
-
               const maxPoints = editForm.qCount * editForm.pointsHit;
               const cutOffPointsEq = maxPoints > 0 ? (maxPoints * (editForm.cutOffPct / 100)).toFixed(1) : 0;
               const lastCallPctEq = (maxPoints > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / maxPoints) * 100).toFixed(1) : 0;
@@ -567,30 +512,13 @@
                                       </div>
                                       {descResults.length > 0 && (
                                           <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
-                                              <div className="flex justify-between p-2 bg-slate-900/50">
-                                                  <span className="text-xs text-slate-400">Selecciona para autocompletar:</span>
-                                                  <button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button>
-                                              </div>
+                                              <div className="flex justify-between p-2 bg-slate-900/50"><span className="text-xs text-slate-400">Selecciona:</span><button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button></div>
                                               {descResults.map((r, i) => (
                                                   <button key={i} onClick={() => {
-                                                      setEditForm({
-                                                          ...editForm, 
-                                                          type: r.label,
-                                                          qCount: r.q,
-                                                          timeMinutes: r.t,
-                                                          cutOffPct: r.c,
-                                                          optionsCount: r.o,
-                                                          lastCallDate: r.last_date,
-                                                          lastCallPlaces: r.places,
-                                                          lastCallCutoff: r.cut_score,
-                                                          lastCallLink: r.exam_link
-                                                      }); 
+                                                      setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o, lastCallDate: r.last_date, lastCallPlaces: r.places, lastCallCutoff: r.cut_score, lastCallLink: r.exam_link }); 
                                                       setDescResults([]);
-                                                  }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 hover:text-white border-b border-slate-700 last:border-0 group">
-                                                      <div className="font-bold">{r.label}</div>
-                                                      <div className="text-[10px] text-slate-500 group-hover:text-blue-200">
-                                                          {r.q} Preus. | {r.t} Min. | {r.places} Plazas | {r.last_date}
-                                                      </div>
+                                                  }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 border-b border-slate-700">
+                                                      <div className="font-bold">{r.label}</div><div className="text-[10px] text-slate-500">{r.q} P | {r.t} m</div>
                                                   </button>
                                               ))}
                                           </div>
@@ -599,43 +527,34 @@
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Preguntas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} /></div>
-                                  <div>
-                                      <label className="text-xs text-slate-400 block mb-1">Corte % <span className="text-slate-500 ml-1">({cutOffPointsEq} pts)</span></label>
-                                      <input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} />
-                                  </div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Corte % ({cutOffPointsEq} pts)</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Minutos</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.timeMinutes} onChange={e => setEditForm({...editForm, timeMinutes: parseInt(e.target.value)})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
                               </div>
                           </div>
 
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-purple-900/10 border-purple-500/30">
-                              <h4 className="text-sm font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2 mb-4"><Icons.Calendar size={16}/> Última Convocatoria</h4>
+                              <div className="flex justify-between items-center mb-4">
+                                  <h4 className="text-sm font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria</h4>
+                                  <button 
+                                      onClick={handleSearchLastCall} 
+                                      disabled={searchingLastCall}
+                                      className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg border border-purple-400/50"
+                                      title="Buscar datos última convocatoria automáticamente"
+                                  >
+                                      {searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} 
+                                      Autocompletar
+                                  </button>
+                              </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
-                                  <div>
-                                      <label className="text-xs text-slate-400 block mb-1">Corte (Puntos) <span className="text-slate-500 ml-1">({lastCallPctEq}%)</span></label>
-                                      <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} />
-                                  </div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace Examen</label>
-                                      <div className="flex gap-2">
-                                          <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="https://..." />
-                                          {editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-slate-700 rounded hover:bg-slate-600 text-white"><Icons.ExternalLink size={14}/></a>}
-                                      </div>
-                                  </div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Corte (Puntos) ({lastCallPctEq}%)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} /></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="https://..." />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-slate-700 rounded hover:bg-slate-600 text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
                               </div>
                               <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
-                                  <label className="flex items-center gap-2 cursor-pointer">
-                                      <input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" />
-                                      <span className="text-sm font-bold text-purple-300">Incluir en simulacro</span>
-                                  </label>
-                                  {editForm.includeLastCall && (
-                                      <div className="flex items-center gap-2 ml-auto">
-                                          <span className="text-xs text-slate-400">Peso:</span>
-                                          <input type="number" value={editForm.lastCallPct} onChange={e => setEditForm({...editForm, lastCallPct: parseFloat(e.target.value)})} className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-white text-sm" />
-                                          <span className="text-xs font-bold text-slate-500">%</span>
-                                      </div>
-                                  )}
+                                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir en simulacro</span></label>
+                                  {editForm.includeLastCall && (<div className="flex items-center gap-2 ml-auto"><span className="text-xs text-slate-400">Peso:</span><input type="number" value={editForm.lastCallPct} onChange={e => setEditForm({...editForm, lastCallPct: parseFloat(e.target.value)})} className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-white text-sm" /><span className="text-xs font-bold text-slate-500">%</span></div>)}
                               </div>
                           </div>
 
@@ -652,31 +571,17 @@
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
                                           <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
-                                          <div className="flex-1 min-w-0">
-                                              <div className="text-sm font-bold truncate text-white">{file.name}</div>
-                                              <div className="text-[10px] text-slate-400">ID: {file.id.slice(-6)}</div>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                              <button onClick={() => handleOpenPdfOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir Original</button>
-                                              <button onClick={() => handleViewPdfText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Ver Texto</button>
-                                          </div>
-                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2">
-                                              <span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span>
-                                              <input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" />
-                                              <span className="text-xs font-bold text-slate-500 pr-1">%</span>
-                                          </div>
-                                          <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Icons.Trash2 size={16}/></button>
+                                          <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate text-white">{file.name}</div><div className="text-[10px] text-slate-400">ID: {file.id.slice(-6)}</div></div>
+                                          <div className="flex items-center gap-1"><button onClick={() => handleOpenPdfOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir Original</button><button onClick={() => handleViewPdfText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Ver Texto</button></div>
+                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2"><span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span><input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" /><span className="text-xs font-bold text-slate-500 pr-1">%</span></div>
+                                          <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400"><Icons.Trash2 size={16}/></button>
                                       </div>
                                   ))}
                               </div>
                               <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
                                   <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
                                   <div className="flex items-center gap-4 text-xs font-mono">
-                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span>
-                                      <span className="text-slate-600">|</span>
-                                      <span className="text-purple-400">Convocatoria: {lastCallWeight}%</span>
-                                      <span className="text-slate-600">|</span>
-                                      <span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
+                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span><span className="text-slate-600">|</span><span className="text-purple-400">Convocatoria: {lastCallWeight}%</span><span className="text-slate-600">|</span><span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
                                   </div>
                               </div>
                           </div>
@@ -685,27 +590,17 @@
                               <div className="flex justify-between items-center mb-4">
                                   <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
                                   <div className="flex gap-2">
-                                      <button onClick={handleMagicWand} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">
-                                          {generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto
-                                      </button>
+                                      <button onClick={handleMagicWandTopics} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
                                       <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
                                   </div>
                               </div>
                               {editForm.topics.map((t, idx) => (
                                   <div key={idx} className="flex gap-2 mb-2 items-center">
                                       <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} />
-                                      <div className="relative w-24">
-                                          <input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6 font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/>
-                                          <span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span>
-                                      </div>
+                                      <div className="relative w-24"><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6 font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span></div>
                                       <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button>
                                   </div>
                               ))}
-                              {internetPct > 0 && (
-                                  <div className="text-right mt-2 text-xs font-bold border-t border-slate-700 pt-2">
-                                      Suma de pesos: <span className={Math.abs(topicsTotal - 100) < 1 ? "text-green-400" : "text-yellow-500"}>{topicsTotal}%</span>
-                                  </div>
-                              )}
                           </div>
 
                           <div className="glass-panel p-6 rounded-xl">
@@ -726,10 +621,7 @@
                       {viewingPdf && (
                           <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in" onClick={() => setViewingPdf(null)}>
                               <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                                  <div className="flex justify-between items-center mb-4">
-                                      <h3 className="text-xl font-bold text-white">Contenido Extraído</h3>
-                                      <button onClick={() => setViewingPdf(null)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button>
-                                  </div>
+                                  <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Contenido Extraído</h3><button onClick={() => setViewingPdf(null)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div>
                                   <textarea readOnly className="flex-1 bg-black text-white font-mono text-sm p-4 rounded-xl border border-slate-800 focus:outline-none resize-none" value={pdfContent}></textarea>
                               </div>
                           </div>
@@ -757,6 +649,7 @@
               </div>
           );
       };
+
 
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;

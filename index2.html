@@ -451,7 +451,7 @@
               if(!apiKey) return alert("Falta API Key");
               setSearchingLastCall(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Busca el enlace DIRECTO al archivo .pdf del último examen real de "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL_DIRECTA_PDF"}.`);
+                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes PDF. Encuentra el enlace DIRECTO al archivo .pdf del último examen real de "${editForm.type || editForm.name}". NO des enlaces a páginas genéricas. Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL_DIRECTA_PDF"}.`);
                   const data = extractJSON(res);
                   if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true }));
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
@@ -521,10 +521,11 @@
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
                                   <div>
+                                      {/* PORCENTAJE PUNTOS CORTE SOBRE MÁXIMO - INTEGRADO EN EL LABEL */}
                                       <label className="text-xs text-slate-400 block mb-1">Puntos Corte <span className="text-purple-400 font-bold ml-1">({lastCallPctEq}%)</span></label>
                                       <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} />
                                   </div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">PDF del Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="Directo .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace al Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="Directo .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
                               </div>
                               <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                                   <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir fuente en simulacro</span></label>
@@ -575,6 +576,7 @@
                               </div>
                           </div>
 
+                          {/* PESO DE LAS PREGUNTAS DEL SIMULACRO */}
                           <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl mb-6 shadow-xl">
                               <h5 className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-[0.2em] text-center">PESO DE LAS PREGUNTAS DEL SIMULACRO (TOTAL 100%)</h5>
                               <div className="grid grid-cols-3 gap-2">
@@ -609,15 +611,27 @@
                       {subjects.map(sub => (
                           <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden transition-all ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700 hover:border-slate-500'}`}>
                               {sub.files?.length > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {sub.files.length} Docs</div>}
+                              
                               <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div></div>
-                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
+                              
+                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4>
+                              <p className="text-xs text-slate-400 mb-2 h-8 overflow-hidden">{sub.type}</p>
+                              
+                              {/* LITERAL DE SELECCIONADA PARA SIMULACRO */}
+                              {activeSubjectId === sub.id && (
+                                  <div className="mb-4 flex items-center gap-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                                      <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Seleccionada para Simulacro</span>
+                                  </div>
+                              )}
+                              
                               <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
                           </div>
                       ))}
                   </div>
               </div>
           );
-      };
+      };  
 
 
 

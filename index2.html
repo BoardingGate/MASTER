@@ -311,6 +311,7 @@
       };
 
 
+        
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
@@ -401,7 +402,7 @@
                   }
 
                   if (!extractedText || extractedText.trim().length < 150) {
-                      alert("⚠️ ERROR DE LECTURA:\n\nNo se ha detectado texto en el PDF. BoardingGate no admite PDFs que sean solo imágenes (escaneos).\n\nPor favor, usa un PDF original o procesa tu archivo con una herramienta de OCR antes de subirlo.");
+                      alert("⚠️ ERROR DE IMPORTACIÓN:\n\nNo se ha detectado texto en este PDF. BoardingGate requiere documentos originales con capa de texto.\n\nSi el archivo es un escaneo de imagen, debe procesarse previamente con OCR antes de ser cargado.");
                       setProcessing(false);
                       return;
                   }
@@ -441,7 +442,7 @@
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Experto en oposiciones. Localiza datos oficiales de: "${query}". Responde ÚNICAMENTE un JSON array: [{"label": "Nombre oficial", "q": num_preguntas, "t": mins, "c": corte_pct, "o": opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": puntos_corte, "exam_link": "URL_DIRECTA_PDF_EXAMEN"}].`);
+                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Localiza datos oficiales de: "${query}". Responde ÚNICAMENTE JSON array: [{"label": "Nombre oficial", "q": num_preguntas, "t": mins, "c": corte_pct, "o": opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": puntos_corte, "exam_link": "URL_DIRECTA_PDF_EXAMEN"}].`);
                   const list = extractJSON(res);
                   if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||100, t: parseInt(i.t)||90, c: parseInt(i.c)||50, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||''}))); 
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
@@ -452,7 +453,7 @@
               if(!apiKey) return alert("Falta API Key");
               setSearchingLastCall(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `BUSCADOR DE PDFS OFICIALES. Encuentra el enlace DIRECTO al archivo PDF (que termine en .pdf) con el cuestionario de preguntas del último examen real de: "${editForm.type || editForm.name}". NO des enlaces a buscadores ni páginas principales. Solo enlaces directos al documento PDF de preguntas. Responde este JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos_sobre_total, "link": "URL_DIRECTA_AL_ARCHIVO.pdf"}.`);
+                  const res = await askGemini(JSON.parse(apiKey), `URGENTE: Encuentra el enlace DIRECTO al documento PDF (debe terminar en .pdf) que contiene el cuestionario de preguntas del último examen de la oposición "${editForm.type || editForm.name}". Ignora páginas web generales, solo enlaces al archivo PDF. Responde este JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos_sobre_total, "link": "URL_DEL_PDF"}.`);
                   const data = extractJSON(res);
                   if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true }));
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
@@ -520,13 +521,12 @@
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
-                                  <div className="relative">
-                                      {/* PORCENTAJE PUNTOS SOBRE CORTE - EXACTAMENTE ENCIMA */}
-                                      <div className="absolute -top-5 right-0 text-[10px] font-bold text-purple-400">{lastCallPctEq}% del máximo</div>
-                                      <label className="text-xs text-slate-400 block mb-1">Puntos Corte</label>
+                                  <div>
+                                      {/* PORCENTAJE PUNTOS CORTE SOBRE MÁXIMO - INTEGRADO EN EL LABEL */}
+                                      <label className="text-xs text-slate-400 block mb-1">Puntos Corte <span className="text-purple-400 font-bold ml-1">({lastCallPctEq}%)</span></label>
                                       <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} />
                                   </div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">PDF del Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="Enlace directo .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace al Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="Directo .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
                               </div>
                               <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                                   <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir esta fuente en el simulacro</span></label>
@@ -538,7 +538,7 @@
                               <div className="flex justify-between items-start mb-4">
                                   <div>
                                       <h4 className="text-sm font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.FileText size={16}/> Temario Aportado por el Usuario</h4>
-                                      <p className="text-[10px] text-slate-400 mt-1 leading-tight max-w-md italic">Nota: Solo se admiten PDFs con capa de texto (originales). Si es un escaneo, procésalo con OCR antes de subirlo.</p>
+                                      <p className="text-[10px] text-slate-400 mt-1 leading-tight max-w-md italic">Nota: Solo se admiten documentos originales con capa de texto. Si el PDF es un escaneo de imagen, debe procesarse previamente con OCR.</p>
                                   </div>
                                   <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
                                       <Icons.Upload size={14}/> {processing ? `${progress}%` : "Cargar"}
@@ -573,9 +573,9 @@
                               </div>
                           </div>
 
-                          {/* RESUMEN FINAL DEL SIMULACRO */}
+                          {/* PESO DE LAS PREGUNTAS DEL SIMULACRO */}
                           <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl mb-6">
-                              <h5 className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-[0.2em] text-center">Configuración del Simulacro (Total 100%)</h5>
+                              <h5 className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-[0.2em] text-center">PESO DE LAS PREGUNTAS DEL SIMULACRO (TOTAL 100%)</h5>
                               <div className="grid grid-cols-3 gap-2">
                                   <div className="bg-purple-900/20 border border-purple-500/30 rounded p-2 text-center">
                                       <div className="text-[9px] text-purple-400 font-bold uppercase mb-1">Convocatoria</div>
@@ -590,9 +590,6 @@
                                       <div className="text-lg font-display font-bold text-white">{internetPct}%</div>
                                   </div>
                               </div>
-                              { (totalPdfPct + lastCallWeight) > 100 && (
-                                  <div className="mt-3 text-center text-xs text-red-400 font-bold animate-pulse">⚠️ ERROR: La suma de fuentes excede el 100%</div>
-                              )}
                           </div>
 
                           <div className="flex gap-4 pt-4 border-t border-slate-700">
@@ -628,7 +625,7 @@
                   </div>
               </div>
           );
-      };   
+      };
 
 
 

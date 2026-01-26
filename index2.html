@@ -311,20 +311,22 @@
       };
 
 
+
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
+          
+          // Estados para PDF
           const [pdfProcessing, setPdfProcessing] = useState(false);
           const [pdfProgress, setPdfProgress] = useState(0);
-          
-          // Estados de búsqueda
-          const [searchingDesc, setSearchingDesc] = useState(false);
-          const [searchingLastCall, setSearchingLastCall] = useState(false); // <--- NUEVO ESTADO
-          const [descResults, setDescResults] = useState([]);
-          const [generatingTopics, setGeneratingTopics] = useState(false);
-          
           const [viewingPdf, setViewingPdf] = useState(null);
           const [pdfContent, setPdfContent] = useState('');
+
+          // Estados para Buscadores IA
+          const [searchingDesc, setSearchingDesc] = useState(false);
+          const [searchingLastCall, setSearchingLastCall] = useState(false);
+          const [descResults, setDescResults] = useState([]);
+          const [generatingTopics, setGeneratingTopics] = useState(false);
           
           const defaultSubject = { 
               id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
@@ -334,13 +336,18 @@
           };
 
           const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
-          const handleEdit = (sub) => { const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; setEditForm(safeSub); setIsEditing(true); };
+          
+          const handleEdit = (sub) => { 
+              const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; 
+              setEditForm(safeSub); 
+              setIsEditing(true); 
+          };
 
           const handleSave = () => {
               if(!editForm.name) return alert("Nombre obligatorio");
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
-              if ((totalPdfPct + lastCallWeight) > 100) return alert(`El porcentaje total de los PDFs y Convocatoria (${totalPdfPct + lastCallWeight}%) excede el 100%.`);
+              if ((totalPdfPct + lastCallWeight) > 100) return alert(`El porcentaje total (${totalPdfPct + lastCallWeight}%) excede el 100%.`);
               setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
               if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
           };
@@ -356,8 +363,7 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
-
-          // --- MOTOR DE EXTRACCIÓN CON "TIME-BOXING" (PARA PDFs 150MB+) ---
+          // --- 1. MOTOR PDF (FIX 150MB + TIME-BOXING) ---
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
@@ -367,167 +373,123 @@
               setPdfProgress(0);
               const fileId = `${editForm.id}_${Date.now()}`;
               
-              // Variables de control de memoria
               let textChunks = [];
               let skippedPages = 0;
               
               try {
                   const url = URL.createObjectURL(file);
-                  
-                  // Configuración Agresiva para Archivos Grandes
                   const loadingTask = pdfjsLib.getDocument({
                       url: url,
                       cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
                       cMapPacked: true,
-                      disableAutoFetch: true,  // Vital para archivos grandes
-                      disableStream: true,
-                      disableFontFace: true,   // Ignorar fuentes
-                      nativeImageDecoderSupport: 'none', // Ignorar imágenes
-                      ignoreErrors: true       // Intentar continuar tras errores
+                      disableAutoFetch: true, disableStream: true, disableFontFace: true, nativeImageDecoderSupport: 'none', ignoreErrors: true
                   });
 
                   const pdf = await loadingTask.promise;
                   const numPages = pdf.numPages;
 
-                  // Bucle de extracción página a página
                   for (let i = 1; i <= numPages; i++) {
                       try {
-                          // PROMESA DE CARRERA (RACE):
-                          // Ponemos a competir la extracción vs un temporizador de 2.5 segundos.
-                          // Si la página es muy compleja (gráficos vectoriales pesados), ganará el temporizador y saltaremos la página.
+                          // ESTRATEGIA TIME-BOXING: 2.5s máximo por página
                           const textPromise = (async () => {
                               const page = await pdf.getPage(i);
-                              // 'normalizeWhitespace' es false para ganar velocidad pura, luego limpiaremos
                               const content = await page.getTextContent({ disableCombineTextItems: false });
                               const strings = content.items.map(item => item.str);
-                              page.cleanup(); // Limpieza obligatoria
+                              page.cleanup();
                               return strings.join(' ');
                           })();
-
-                          const timeoutPromise = new Promise((_, reject) => 
-                              setTimeout(() => reject(new Error("TIMEOUT_PAGE")), 2500)
-                          );
-
-                          // Ejecutar la carrera
-                          const pageText = await Promise.race([textPromise, timeoutPromise]);
+                          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 2500));
                           
-                          if (pageText.length > 0) {
-                              textChunks.push(pageText);
-                          }
+                          const pageText = await Promise.race([textPromise, timeoutPromise]);
+                          if (pageText.length > 0) textChunks.push(pageText);
 
                       } catch (err) {
-                          // Si falla por timeout o error interno, sumamos al contador y seguimos
-                          skippedPages++;
-                          if (err.message !== "TIMEOUT_PAGE") {
-                              console.warn(`Error en pág ${i}:`, err);
-                          }
+                          skippedPages++; // Si falla o tarda, saltamos y seguimos
                       }
 
-                      // Actualizar UI y liberar 'Main Thread'
-                      // En archivos grandes (>50MB), hacemos pausas más largas
                       if (i % 10 === 0 || i === numPages) {
                           setPdfProgress(Math.round((i / numPages) * 100));
-                          
-                          // Pausa de 50ms para que el Garbage Collector (GC) tenga tiempo de actuar
-                          // Esto reduce drásticamente los crashes de memoria.
-                          await new Promise(r => setTimeout(r, 50)); 
+                          await new Promise(r => setTimeout(r, 50)); // Pausa GC
                       }
                   }
 
-                  // Liberación final
                   URL.revokeObjectURL(url); 
-                  loadingTask.destroy(); // Destruir worker asignado
+                  loadingTask.destroy(); 
 
-                  // Unir texto con doble salto de línea
                   const fullText = textChunks.join('\n\n');
-
-                  // Validaciones finales
-                  if (fullText.length < 100) {
-                      alert("ERROR: No se pudo extraer texto.\nPosibles causas:\n1. PDF protegido con contraseña de lectura.\n2. PDF contiene solo imágenes (aunque parezca texto).\n3. Archivo corrupto.");
-                      setPdfProcessing(false);
-                      return;
-                  }
-
-                  if (skippedPages > 0) {
-                      console.log(`Se saltaron ${skippedPages} páginas por complejidad excesiva.`);
-                  }
-
-                  // Guardar
+                  if (fullText.length < 100) alert("AVISO: Muy poco texto extraído. Posible PDF de imágenes o protegido.");
+                  
                   await saveToDB(fileId, { text: fullText, fileData: file }); 
 
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  setEditForm(prev => ({ 
-                      ...prev, 
-                      files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] 
-                  }));
+                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
 
-              } catch (err) {
-                  console.error(err);
-                  alert(`Error fatal leyendo PDF: ${err.message}`);
-              } finally {
-                  setPdfProcessing(false);
+              } catch (err) { alert(`Error lectura PDF: ${err.message}`); } finally { setPdfProcessing(false); }
+          };
+
+          // --- 2. FUNCIONES DE GESTIÓN DE ARCHIVOS (LAS QUE FALTABAN) ---
+          const handleDeleteFile = async (idx) => {
+              const file = editForm.files[idx];
+              await deleteFromDB(file.id);
+              const newFiles = editForm.files.filter((_, i) => i !== idx);
+              setEditForm({...editForm, files: newFiles});
+          };
+
+          const handleViewPdfText = async (fileId) => {
+              try {
+                  const data = await getFromDB(fileId);
+                  const txt = (data && data.text && data.text.trim().length > 0) ? data.text : "⚠️ NO SE DETECTÓ TEXTO LEGIBLE.";
+                  setPdfContent(txt);
+                  setViewingPdf(true);
+              } catch(e) { 
+                  setPdfContent("Error al recuperar: " + e.message); 
+                  setViewingPdf(true); 
               }
           };
-          
-          
 
-          // --- BUSCADOR GENERAL (YA EXISTENTE) ---
+          const handleOpenPdfOriginal = async (fileId) => {
+               try {
+                   const data = await getFromDB(fileId);
+                   if (data && data.fileData) {
+                       const url = URL.createObjectURL(data.fileData);
+                       window.open(url, '_blank');
+                   } else { alert("Archivo no encontrado en base de datos."); }
+               } catch(e) { alert("Error: " + e.message); }
+          };
+
+          // --- 3. BUSCADORES IA ---
           const handleSearchDescription = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              if(!editForm.name && !editForm.type) return alert("Escribe algo en nombre o descripción para buscar");
+              if(!apiKey) return alert("Falta API Key");
               setSearchingDesc(true);
               const query = editForm.type || editForm.name;
-              const prompt = `Actúa como experto en Oposiciones. Busca información OFICIAL sobre: "${query}". Devuelve JSON array: [{"label": "Nombre Oficial", "q": nº_preguntas, "t": minutos, "c": corte_pct, "o": opciones, "last_date": "YYYY-MM-DD", "places": plazas, "cut_score": corte_puntos, "exam_link": "url_pdf"}].`;
+              const prompt = `Experto Oposiciones. Info OFICIAL sobre: "${query}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "url"}].`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
-                  if(Array.isArray(list) && list.length > 0) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||''}))); 
-                  else alert("Sin resultados.");
+                  if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||''}))); 
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
           };
 
-          // --- NUEVO: BUSCADOR ESPECÍFICO ÚLTIMA CONVOCATORIA (VARITA MÁGICA) ---
           const handleSearchLastCall = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              const query = editForm.type || editForm.name;
-              if(!query) return alert("Rellena el campo 'Descripción' u 'Oposición oficial' antes de usar la varita.");
-              
+              if(!apiKey) return alert("Falta API Key");
+              if(!editForm.type) return alert("Rellena descripción primero.");
               setSearchingLastCall(true);
-              const prompt = `Actúa como experto en empleo público. Busca EXCLUSIVAMENTE los datos de la ÚLTIMA CONVOCATORIA (examen más reciente) de: "${query}".
-              Necesito: Fecha del examen, Número de Plazas, Nota de Corte (puntos) y Enlace al examen o web oficial.
-              Devuelve un ÚNICO objeto JSON: {"date": "YYYY-MM-DD", "places": numero, "cutoff": puntos_decimal, "link": "url"}. Si no encuentras algo, pon null.`;
-              
+              const prompt = `Experto empleo público. ÚLTIMA CONVOCATORIA de: "${editForm.type}". JSON único: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "url"}.`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const data = extractJSON(res);
-                  if(data) {
-                      setEditForm(prev => ({
-                          ...prev,
-                          lastCallDate: data.date || prev.lastCallDate,
-                          lastCallPlaces: data.places || prev.lastCallPlaces,
-                          lastCallCutoff: data.cutoff || prev.lastCallCutoff,
-                          lastCallLink: data.link || prev.lastCallLink,
-                          includeLastCall: true // La activamos automáticamente si encontramos datos
-                      }));
-                  } else {
-                      alert("La IA no pudo estructurar los datos de la última convocatoria.");
-                  }
-              } catch(e) { 
-                  alert("Error en búsqueda: " + e.message); 
-              } finally { 
-                  setSearchingLastCall(false); 
-              }
+                  if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true }));
+              } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
           };
 
           const handleMagicWandTopics = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Configura la API Key primero");
-              if(!editForm.type) return alert("Rellena la descripción primero.");
+              if(!apiKey) return alert("Falta API Key");
               setGeneratingTopics(true);
-              const prompt = `Genera temario oficial para: "${editForm.type}". JSON array: [{"name": "Tema", "pct": entero_peso}]. Máx 20 temas.`;
+              const prompt = `Temario oficial: "${editForm.type}". JSON array: [{"name": "Tema", "pct": peso}].`;
               try {
                   const res = await askGemini(JSON.parse(apiKey), prompt);
                   const list = extractJSON(res);
@@ -539,10 +501,8 @@
               const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
               const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
               const internetPct = Math.max(0, 100 - totalPdfPct - lastCallWeight);
-              const topicsTotal = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
-              const maxPoints = editForm.qCount * editForm.pointsHit;
-              const cutOffPointsEq = maxPoints > 0 ? (maxPoints * (editForm.cutOffPct / 100)).toFixed(1) : 0;
-              const lastCallPctEq = (maxPoints > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / maxPoints) * 100).toFixed(1) : 0;
+              const cutOffPointsEq = (editForm.qCount * editForm.pointsHit) > 0 ? ((editForm.qCount * editForm.pointsHit) * (editForm.cutOffPct / 100)).toFixed(1) : 0;
+              const lastCallPctEq = ((editForm.qCount * editForm.pointsHit) > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / (editForm.qCount * editForm.pointsHit)) * 100).toFixed(1) : 0;
 
               return (
                   <div className="h-full flex flex-col p-4 overflow-y-auto">
@@ -562,12 +522,7 @@
                                           <div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">
                                               <div className="flex justify-between p-2 bg-slate-900/50"><span className="text-xs text-slate-400">Selecciona:</span><button onClick={()=>setDescResults([])}><Icons.XCircle size={14}/></button></div>
                                               {descResults.map((r, i) => (
-                                                  <button key={i} onClick={() => {
-                                                      setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o, lastCallDate: r.last_date, lastCallPlaces: r.places, lastCallCutoff: r.cut_score, lastCallLink: r.exam_link }); 
-                                                      setDescResults([]);
-                                                  }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 border-b border-slate-700">
-                                                      <div className="font-bold">{r.label}</div><div className="text-[10px] text-slate-500">{r.q} P | {r.t} m</div>
-                                                  </button>
+                                                  <button key={i} onClick={() => { setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o, lastCallDate: r.last_date, lastCallPlaces: r.places, lastCallCutoff: r.cut_score, lastCallLink: r.exam_link }); setDescResults([]); }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 border-b border-slate-700"><div className="font-bold">{r.label}</div></button>
                                               ))}
                                           </div>
                                       )}
@@ -584,21 +539,13 @@
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-purple-900/10 border-purple-500/30">
                               <div className="flex justify-between items-center mb-4">
                                   <h4 className="text-sm font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria</h4>
-                                  <button 
-                                      onClick={handleSearchLastCall} 
-                                      disabled={searchingLastCall}
-                                      className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg border border-purple-400/50"
-                                      title="Buscar datos última convocatoria automáticamente"
-                                  >
-                                      {searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} 
-                                      Autocompletar
-                                  </button>
+                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg">{searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                                   <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
                                   <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Corte (Puntos) ({lastCallPctEq}%)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="https://..." />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-slate-700 rounded hover:bg-slate-600 text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Corte (Pts) ({lastCallPctEq}%)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} /></div>
+                                  <div><label className="text-xs text-slate-400 block mb-1">Link</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-slate-700 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
                               </div>
                               <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                                   <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir en simulacro</span></label>
@@ -608,58 +555,35 @@
 
                           <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
                               <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> Documentación Anexa (PDFs)</h4>
-                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
-                                      <Icons.Upload size={14}/> {pdfProcessing ? `Leyendo ${pdfProgress}%` : "Añadir PDF"}
-                                      <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} />
-                                  </label>
+                                  <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2"><Icons.FileText size={16}/> PDFs Anexos</h4>
+                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"><Icons.Upload size={14}/> {pdfProcessing ? `Leyendo ${pdfProgress}%` : "Añadir PDF"}<input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={pdfProcessing} /></label>
                               </div>
                               <div className="space-y-2 mb-4">
-                                  {editForm.files.length === 0 && <div className="text-slate-500 text-sm italic p-4 text-center border border-dashed border-slate-700 rounded-xl">No hay documentos anexos.</div>}
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
                                           <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
                                           <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate text-white">{file.name}</div><div className="text-[10px] text-slate-400">ID: {file.id.slice(-6)}</div></div>
-                                          <div className="flex items-center gap-1"><button onClick={() => handleOpenPdfOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir Original</button><button onClick={() => handleViewPdfText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Ver Texto</button></div>
-                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2"><span className="text-[10px] font-bold text-slate-400 pl-2">Peso:</span><input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" /><span className="text-xs font-bold text-slate-500 pr-1">%</span></div>
+                                          <div className="flex items-center gap-1"><button onClick={() => handleOpenPdfOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir</button><button onClick={() => handleViewPdfText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Ver Texto</button></div>
+                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2"><input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" /><span className="text-xs font-bold text-slate-500 pr-1">%</span></div>
                                           <button onClick={() => handleDeleteFile(idx)} className="p-2 text-slate-500 hover:text-red-400"><Icons.Trash2 size={16}/></button>
                                       </div>
                                   ))}
                               </div>
-                              <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700">
-                                  <div className="text-xs text-slate-400 font-bold">Distribución del Examen:</div>
-                                  <div className="flex items-center gap-4 text-xs font-mono">
-                                      <span className={totalPdfPct > 100 ? "text-red-400 font-bold" : "text-blue-400"}>PDFs: {totalPdfPct}%</span><span className="text-slate-600">|</span><span className="text-purple-400">Convocatoria: {lastCallWeight}%</span><span className="text-slate-600">|</span><span className={internetPct === 0 ? "text-slate-600" : "text-green-400"}>Internet (Temas): {internetPct}%</span>
-                                  </div>
+                              <div className="bg-slate-900/80 p-3 rounded-lg flex justify-between items-center border border-slate-700 text-xs font-mono">
+                                  <span className={totalPdfPct > 100 ? "text-red-400" : "text-blue-400"}>PDFs: {totalPdfPct}%</span><span className="text-slate-600">|</span><span className="text-purple-400">Conv: {lastCallWeight}%</span><span className="text-slate-600">|</span><span className="text-green-400">Web: {internetPct}%</span>
                               </div>
                           </div>
 
                           <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
                               <div className="flex justify-between items-center mb-4">
-                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario General (Búsqueda Internet) <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">{internetPct}% del examen</span></label>
-                                  <div className="flex gap-2">
-                                      <button onClick={handleMagicWandTopics} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded font-bold flex items-center gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
-                                      <button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button>
-                                  </div>
+                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario Web ({internetPct}%)</label>
+                                  <div className="flex gap-2"><button onClick={handleMagicWandTopics} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 px-3 py-1 rounded font-bold flex gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button><button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button></div>
                               </div>
                               {editForm.topics.map((t, idx) => (
-                                  <div key={idx} className="flex gap-2 mb-2 items-center">
-                                      <input type="text" placeholder="Tema" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} />
-                                      <div className="relative w-24"><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right pr-6 font-bold" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><span className="absolute right-2 top-2 text-slate-500 text-xs font-bold">%</span></div>
-                                      <button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button>
-                                  </div>
+                                  <div key={idx} className="flex gap-2 mb-2 items-center"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} /><input type="number" className="w-20 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button></div>
                               ))}
                           </div>
 
-                          <div className="glass-panel p-6 rounded-xl">
-                              <h4 className="text-sm font-bold text-slate-400 mb-3 uppercase tracking-wider">Baremo</h4>
-                              <div className="grid grid-cols-3 gap-4">
-                                  <div><label className="text-xs font-bold text-green-400 block mb-1">Acierto</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-green-400 font-bold text-right" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-red-400 block mb-1">Fallo</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-red-400 font-bold text-right" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs font-bold text-slate-400 block mb-1">Omisión</label><input type="number" step="0.1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
-                              </div>
-                          </div>
-                          
                           <div className="flex gap-4 pt-6 mt-4 border-t border-slate-700">
                               <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
                               <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar</button>
@@ -669,7 +593,7 @@
                       {viewingPdf && (
                           <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in" onClick={() => setViewingPdf(null)}>
                               <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                                  <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Contenido Extraído</h3><button onClick={() => setViewingPdf(null)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div>
+                                  <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Texto Extraído</h3><button onClick={() => setViewingPdf(null)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div>
                                   <textarea readOnly className="flex-1 bg-black text-white font-mono text-sm p-4 rounded-xl border border-slate-800 focus:outline-none resize-none" value={pdfContent}></textarea>
                               </div>
                           </div>
@@ -682,21 +606,20 @@
               <div className="h-full flex flex-col p-6 fade-in overflow-y-auto">
                   <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Icons.Plus size={20}/> Nueva</button></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-                      {subjects.map(sub => {
-                           const fileCount = sub.files ? sub.files.length : 0;
-                           return (
-                              <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
-                                  {fileCount > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {fileCount} PDF(s)</div>}
-                                  <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div>{activeSubjectId === sub.id && <div className="bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase">Seleccionada</div>}</div>
-                                  <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
-                                  <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
-                              </div>
-                           )
-                      })}
+                      {subjects.map(sub => (
+                          <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700'}`}>
+                              {sub.files?.length > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {sub.files.length} PDF(s)</div>}
+                              <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div></div>
+                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4><p className="text-xs text-slate-400 mb-4 h-8 overflow-hidden">{sub.type}</p>
+                              <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
+                          </div>
+                      ))}
                   </div>
               </div>
           );
       };
+
+        
 
 
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {

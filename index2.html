@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -14,7 +13,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js -->
+    <!-- PDF.js - Versión Robusta -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -215,7 +214,7 @@
       const formatTime = (seconds) => {
           const h = Math.floor(seconds / 3600);
           const m = Math.floor((seconds % 3600) / 60);
-          const s = Math.floor(seconds % 60);
+          const s = seconds % 60;
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
@@ -368,20 +367,25 @@
               if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
               setPdfProcessing(true); setPdfProgress(0);
               
-              // ESTRATEGIA DUAL:
-              // 1. Usar FileReader como ArrayBuffer -> Mejor compatibilidad con PDF.js para extraer texto (evita errores de parsing)
+              // 1. ESTRATEGIA BLOB URL: La más segura para que el navegador y PDF.js se entiendan.
+              // Convertimos el archivo en un ArrayBuffer primero para tener los datos crudos.
               const bufferReader = new FileReader();
               bufferReader.onload = async function(evt) {
                   try {
-                      const arrayBuffer = evt.target.result;
-                      const typedarray = new Uint8Array(arrayBuffer);
+                      const buffer = evt.target.result;
+                      // Creamos un Blob a partir del buffer
+                      const blob = new Blob([buffer], { type: 'application/pdf' });
+                      // Creamos una URL temporal que apunta a ese Blob en memoria
+                      const url = URL.createObjectURL(blob);
 
-                      // CONFIGURACIÓN CRÍTICA PDF.JS
-                      // cMapUrl ayuda a entender fuentes generadas automáticamente que no son estándar
+                      // CONFIGURACIÓN ROBUSTA DE PDF.JS
+                      // Usamos la URL del Blob en lugar de datos crudos.
+                      // Añadimos cMapUrl y standardFontDataUrl para asegurar que se decodifican bien los caracteres.
                       const loadingTask = pdfjsLib.getDocument({
-                          data: typedarray,
-                          cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+                          url: url,
+                          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
                           cMapPacked: true,
+                          standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
                       });
 
                       const pdf = await loadingTask.promise;
@@ -389,18 +393,24 @@
                       for (let i = 1; i <= pdf.numPages; i++) {
                           const page = await pdf.getPage(i);
                           const textContent = await page.getTextContent();
-                          // Unir texto con lógica de fin de línea
-                          const pageText = textContent.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join(' ');
+                          
+                          // Unimos el texto. A veces 'item.str' es lo único que hay.
+                          // Añadimos lógica para saltos de línea si existen marcadores.
+                          const pageText = textContent.items.map(item => item.str + (item.hasEOL ? '\n' : '')).join(' ');
                           fullText += pageText + "\n\n";
+                          
                           setPdfProgress(Math.round((i / pdf.numPages) * 100));
                       }
 
+                      // Liberamos la URL temporal
+                      URL.revokeObjectURL(url);
+
                       if(fullText.trim().length < 50) {
-                          alert("ATENCIÓN: Se ha extraído muy poco texto. Es posible que el PDF use una codificación de fuente no estándar o esté protegido.");
+                          alert("ATENCIÓN: Se ha extraído muy poco texto. Aunque el PDF no sea imagen, puede usar una codificación de caracteres no estándar que impide la extracción simple.");
                       }
 
-                      // 2. Para guardar, necesitamos el Base64 (DataURL)
-                      // Leemos el archivo una segunda vez como DataURL para asegurar integridad en el guardado
+                      // 2. AHORA GUARDAMOS EN BASE64
+                      // Usamos un segundo lector para obtener la cadena Base64 limpia para la base de datos
                       const dataUrlReader = new FileReader();
                       dataUrlReader.onload = async function(e2) {
                           const base64String = e2.target.result;
@@ -412,14 +422,15 @@
                           setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
                           setPdfProcessing(false);
                       };
-                      dataUrlReader.readAsDataURL(file);
+                      dataUrlReader.readAsDataURL(file); // Leemos el archivo original de nuevo para Base64
 
                   } catch (err) {
                       console.error(err);
-                      alert("Error al procesar el PDF: " + err.message);
+                      alert("Error crítico al procesar el PDF: " + err.message);
                       setPdfProcessing(false);
                   }
               };
+              // Iniciamos la lectura como ArrayBuffer
               bufferReader.readAsArrayBuffer(file);
           };
 
@@ -449,8 +460,6 @@
               try {
                   const data = await getFromDB(fileId);
                   if (data && data.fileData) {
-                      // Usamos la función auxiliar para convertir Base64 a Blob localmente
-                      // Evita el uso de fetch() sobre dataURIs grandes que bloquea Chrome
                       const blob = base64ToBlob(data.fileData, 'application/pdf');
                       if(!blob) return alert("Error al reconstruir el PDF.");
                       

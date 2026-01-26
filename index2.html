@@ -356,7 +356,8 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
-          // --- MOTOR DE EXTRACCIÓN OPTIMIZADO (INCLUIDO FIX 150MB) ---
+
+          // --- MOTOR DE EXTRACCIÓN CON "TIME-BOXING" (PARA PDFs 150MB+) ---
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
@@ -366,63 +367,110 @@
               setPdfProgress(0);
               const fileId = `${editForm.id}_${Date.now()}`;
               
+              // Variables de control de memoria
+              let textChunks = [];
+              let skippedPages = 0;
+              
               try {
                   const url = URL.createObjectURL(file);
+                  
+                  // Configuración Agresiva para Archivos Grandes
                   const loadingTask = pdfjsLib.getDocument({
                       url: url,
                       cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
                       cMapPacked: true,
-                      disableAutoFetch: true, disableStream: true, disableFontFace: true, nativeImageDecoderSupport: 'none'
+                      disableAutoFetch: true,  // Vital para archivos grandes
+                      disableStream: true,
+                      disableFontFace: true,   // Ignorar fuentes
+                      nativeImageDecoderSupport: 'none', // Ignorar imágenes
+                      ignoreErrors: true       // Intentar continuar tras errores
                   });
+
                   const pdf = await loadingTask.promise;
                   const numPages = pdf.numPages;
-                  let textChunks = [];
 
+                  // Bucle de extracción página a página
                   for (let i = 1; i <= numPages; i++) {
                       try {
-                          const page = await pdf.getPage(i);
-                          const textContent = await page.getTextContent({ normalizeWhitespace: true });
-                          const pageStrings = textContent.items.map(item => item.str);
-                          if (pageStrings.length > 0) textChunks.push(pageStrings.join(' '));
-                          page.cleanup(); 
-                      } catch (pageErr) { console.warn(`Error pág ${i}`, pageErr); }
-                      if (i % 5 === 0 || i === numPages) {
+                          // PROMESA DE CARRERA (RACE):
+                          // Ponemos a competir la extracción vs un temporizador de 2.5 segundos.
+                          // Si la página es muy compleja (gráficos vectoriales pesados), ganará el temporizador y saltaremos la página.
+                          const textPromise = (async () => {
+                              const page = await pdf.getPage(i);
+                              // 'normalizeWhitespace' es false para ganar velocidad pura, luego limpiaremos
+                              const content = await page.getTextContent({ disableCombineTextItems: false });
+                              const strings = content.items.map(item => item.str);
+                              page.cleanup(); // Limpieza obligatoria
+                              return strings.join(' ');
+                          })();
+
+                          const timeoutPromise = new Promise((_, reject) => 
+                              setTimeout(() => reject(new Error("TIMEOUT_PAGE")), 2500)
+                          );
+
+                          // Ejecutar la carrera
+                          const pageText = await Promise.race([textPromise, timeoutPromise]);
+                          
+                          if (pageText.length > 0) {
+                              textChunks.push(pageText);
+                          }
+
+                      } catch (err) {
+                          // Si falla por timeout o error interno, sumamos al contador y seguimos
+                          skippedPages++;
+                          if (err.message !== "TIMEOUT_PAGE") {
+                              console.warn(`Error en pág ${i}:`, err);
+                          }
+                      }
+
+                      // Actualizar UI y liberar 'Main Thread'
+                      // En archivos grandes (>50MB), hacemos pausas más largas
+                      if (i % 10 === 0 || i === numPages) {
                           setPdfProgress(Math.round((i / numPages) * 100));
-                          await new Promise(r => setTimeout(r, 0)); 
+                          
+                          // Pausa de 50ms para que el Garbage Collector (GC) tenga tiempo de actuar
+                          // Esto reduce drásticamente los crashes de memoria.
+                          await new Promise(r => setTimeout(r, 50)); 
                       }
                   }
-                  const fullText = textChunks.join('\n\n');
+
+                  // Liberación final
                   URL.revokeObjectURL(url); 
-                  if (fullText.length < 50) alert("Advertencia: Poco texto detectado. Verifique si es un PDF de imagen.");
+                  loadingTask.destroy(); // Destruir worker asignado
+
+                  // Unir texto con doble salto de línea
+                  const fullText = textChunks.join('\n\n');
+
+                  // Validaciones finales
+                  if (fullText.length < 100) {
+                      alert("ERROR: No se pudo extraer texto.\nPosibles causas:\n1. PDF protegido con contraseña de lectura.\n2. PDF contiene solo imágenes (aunque parezca texto).\n3. Archivo corrupto.");
+                      setPdfProcessing(false);
+                      return;
+                  }
+
+                  if (skippedPages > 0) {
+                      console.log(`Se saltaron ${skippedPages} páginas por complejidad excesiva.`);
+                  }
+
+                  // Guardar
                   await saveToDB(fileId, { text: fullText, fileData: file }); 
 
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
-              } catch (err) { alert(`Error: ${err.message}`); } finally { setPdfProcessing(false); }
-          };
+                  setEditForm(prev => ({ 
+                      ...prev, 
+                      files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] 
+                  }));
 
-          const handleDeleteFile = async (idx) => {
-              const file = editForm.files[idx];
-              await deleteFromDB(file.id);
-              const newFiles = editForm.files.filter((_, i) => i !== idx);
-              setEditForm({...editForm, files: newFiles});
+              } catch (err) {
+                  console.error(err);
+                  alert(`Error fatal leyendo PDF: ${err.message}`);
+              } finally {
+                  setPdfProcessing(false);
+              }
           };
-
-          const handleViewPdfText = async (fileId) => {
-              try {
-                  const data = await getFromDB(fileId);
-                  setPdfContent((data && data.text && data.text.trim().length > 0) ? data.text : "⚠️ NO SE DETECTÓ TEXTO (PDF ESCANEADO).");
-                  setViewingPdf(true);
-              } catch(e) { setPdfContent("Error: " + e.message); setViewingPdf(true); }
-          };
-
-          const handleOpenPdfOriginal = async (fileId) => {
-              try {
-                  const data = await getFromDB(fileId);
-                  if (data && data.fileData) window.open(URL.createObjectURL(data.fileData), '_blank');
-              } catch(e) { alert("Error: " + e.message); }
-          };
+          
+          
 
           // --- BUSCADOR GENERAL (YA EXISTENTE) ---
           const handleSearchDescription = async () => {

@@ -351,7 +351,7 @@
 
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
 
-          // --- MOTOR DE EXTRACCIÓN MEJORADO PARA PDFs GIGANTES ---
+
           const handlePdfUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
@@ -361,85 +361,77 @@
               setPdfProgress(0);
               
               const fileId = `${editForm.id}_${Date.now()}`;
-              // Límite de caracteres para evitar Crash del navegador (aprox 800k tokens)
-              const MAX_CHARS = 3000000; 
               
               try {
+                  // Usamos URL del Blob para no cargar el archivo entero en memoria JS
                   const url = URL.createObjectURL(file);
-                  
-                  // Configuración para usar menos memoria
+
                   const loadingTask = pdfjsLib.getDocument({
                       url: url,
                       cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
                       cMapPacked: true,
-                      disableAutoFetch: true, 
-                      disableStream: true 
+                      // OPTIMIZACIONES CLAVE PARA ARCHIVOS GRANDES:
+                      disableAutoFetch: true,  // No intentar descargar todo de golpe
+                      disableStream: true,     // Leer por rangos
+                      disableFontFace: true,   // No procesar fuentes (ahorra mucha CPU/RAM)
+                      nativeImageDecoderSupport: 'none' // No decodificar imágenes (solo queremos texto)
                   });
 
                   const pdf = await loadingTask.promise;
                   const numPages = pdf.numPages;
-                  let fullText = "";
-                  let isScanned = true; // Asumimos que es escaneado hasta demostrar lo contrario
-
-                  // PROCESAMIENTO POR LOTES
-                  // Procesamos de 5 en 5 para liberar memoria agresivamente
-                  const BATCH_SIZE = 5;
                   
-                  for (let i = 1; i <= numPages; i++) {
-                      // Comprobar límite de seguridad
-                      if (fullText.length > MAX_CHARS) {
-                          console.warn("Límite de texto alcanzado. Deteniendo extracción para ahorrar memoria.");
-                          fullText += "\n\n[...TEXTO TRUNCADO POR LÍMITE DE MEMORIA DEL NAVEGADOR...]";
-                          break;
-                      }
+                  // Usamos un Array en lugar de String para evitar "Reallocations" de memoria costosas
+                  let textChunks = [];
 
+                  // Procesamos página a página
+                  for (let i = 1; i <= numPages; i++) {
                       try {
+                          // Obtener página
                           const page = await pdf.getPage(i);
                           
-                          // Estrategia de texto: disableCombineTextItems false para que sea más ligero
-                          const textContent = await page.getTextContent({ disableCombineTextItems: false });
+                          // Extraer contenido de texto
+                          // normalizeWhitespace ayuda a limpiar espacios extraños
+                          const textContent = await page.getTextContent({ normalizeWhitespace: true });
                           
-                          // Extraer strings
+                          // Mapear solo los strings, ignorando coordenadas y transformaciones
                           const pageStrings = textContent.items.map(item => item.str);
-                          const pageText = pageStrings.join(' ');
-
-                          // Detección de texto real (si hay letras, no es una imagen pura)
-                          if (pageText.trim().length > 5) {
-                              isScanned = false;
-                              fullText += `--- Pág ${i} ---\n${pageText}\n\n`;
+                          
+                          // Si la página tiene contenido, lo añadimos al array
+                          if (pageStrings.length > 0) {
+                              textChunks.push(pageStrings.join(' '));
                           }
                           
-                          // LIMPIEZA INMEDIATA DE LA PÁGINA
+                          // LIBERAR MEMORIA INMEDIATAMENTE
+                          // Esto es vital para PDFs de 150MB en el navegador
                           page.cleanup(); 
-                      } catch (err) {
-                          console.warn(`Error leyendo pág ${i}:`, err);
+                          
+                      } catch (pageErr) {
+                          console.warn(`Saltando página ${i} por error de lectura:`, pageErr);
+                          // No detenemos el proceso, seguimos con la siguiente
                       }
 
-                      // Actualizar barra de progreso y liberar UI
+                      // Actualizar UI cada 5 páginas para no bloquear el navegador visualmente
                       if (i % 5 === 0 || i === numPages) {
                           setPdfProgress(Math.round((i / numPages) * 100));
-                          // Pausa vital para que el navegador libere RAM y respire
-                          await new Promise(r => setTimeout(r, 10)); 
+                          await new Promise(r => setTimeout(r, 0)); // Ceder control al Event Loop
                       }
                   }
 
-                  URL.revokeObjectURL(url); // Limpieza URL del Blob
+                  // Unir todo el texto al final del proceso
+                  const fullText = textChunks.join('\n\n');
+                  
+                  // Limpiar referencia URL
+                  URL.revokeObjectURL(url); 
 
-                  if (isScanned && fullText.length < 200) {
-                      alert("⚠️ ALERTA DE PDF ESCANEADO\n\nEste archivo de 150MB parece contener solo IMÁGENES.\n\nEl sistema no ha detectado texto seleccionable. Gemini no podrá leerlo.\n\nSOLUCIÓN: Pasa un OCR (Reconocimiento de Texto) al PDF antes de subirlo.");
-                      setPdfProcessing(false);
-                      return;
+                  if (fullText.length < 50) {
+                      alert("Advertencia: El sistema ha leído el archivo pero ha encontrado muy poco texto. Verifica que no sean imágenes incrustadas.");
                   }
 
-                  if (fullText.length < 100) {
-                      alert("Advertencia: Se extrajo muy poco texto. Es posible que el PDF esté protegido o codificado de forma extraña.");
-                  }
-
-                  // Guardar en IndexedDB
-                  // Guardamos el objeto completo. Para archivos muy grandes, IndexedDB es mucho mejor que localStorage.
+                  // Guardar en IndexedDB (Base de datos del navegador)
+                  // Guardamos el texto extraído y el archivo original
                   await saveToDB(fileId, { text: fullText, fileData: file }); 
 
-                  // Actualizar estado del formulario
+                  // Calcular pesos y actualizar estado
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
                   
@@ -450,12 +442,11 @@
 
               } catch (err) {
                   console.error(err);
-                  alert(`Error crítico procesando PDF: ${err.message}\n\nIntenta dividir el PDF en partes más pequeñas si el problema persiste.`);
+                  alert(`Error procesando PDF: ${err.message}. \n\nIntente dividir el archivo si el error persiste.`);
               } finally {
                   setPdfProcessing(false);
               }
           };
-         
 
           const handleDeleteFile = async (idx) => {
               const file = editForm.files[idx];

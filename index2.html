@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -13,7 +14,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js: Aseguramos la versión ES5/Compatible -->
+    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -48,7 +49,7 @@
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
 
-      // Utilidad crucial para convertir Base64 a Blob sin usar fetch (evita errores en Chrome)
+      // Utilidad para convertir Base64 a Blob de forma segura
       const base64ToBlob = (base64Data, contentType = 'application/pdf') => {
           try {
               const parts = base64Data.split(';base64,');
@@ -367,45 +368,51 @@
               if (file.type !== 'application/pdf') return alert("Solo se permiten archivos PDF");
               setPdfProcessing(true); setPdfProgress(0);
               
-              // 1. Leemos como DataURL (Base64) para tener el formato final de guardado
-              const reader = new FileReader();
-              reader.onload = async function(evt) {
+              // ESTRATEGIA DUAL:
+              // 1. Usar FileReader como ArrayBuffer -> Mejor compatibilidad con PDF.js para extraer texto (evita errores de parsing)
+              const bufferReader = new FileReader();
+              bufferReader.onload = async function(evt) {
                   try {
-                      const base64String = evt.target.result; // data:application/pdf;base64,...
-                      
-                      // 2. Convertimos ese mismo Base64 a Blob/Uint8Array para PDF.js
-                      // Esto asegura que la IA lee exactamente lo que guardamos
-                      const blob = base64ToBlob(base64String, 'application/pdf');
-                      const arrayBuffer = await blob.arrayBuffer();
+                      const arrayBuffer = evt.target.result;
                       const typedarray = new Uint8Array(arrayBuffer);
 
-                      // 3. Extracción de texto con PDF.js
-                      // Usamos { data: ... } para evitar problemas con workers externos
-                      const loadingTask = pdfjsLib.getDocument({ data: typedarray });
+                      // CONFIGURACIÓN CRÍTICA PDF.JS
+                      // cMapUrl ayuda a entender fuentes generadas automáticamente que no son estándar
+                      const loadingTask = pdfjsLib.getDocument({
+                          data: typedarray,
+                          cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+                          cMapPacked: true,
+                      });
+
                       const pdf = await loadingTask.promise;
-                      
                       let fullText = "";
                       for (let i = 1; i <= pdf.numPages; i++) {
                           const page = await pdf.getPage(i);
                           const textContent = await page.getTextContent();
-                          // Unimos con saltos de línea inteligentes
-                          const pageText = textContent.items.map(item => item.str + (item.hasEOL ? '\n' : '')).join(' ');
+                          // Unir texto con lógica de fin de línea
+                          const pageText = textContent.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join(' ');
                           fullText += pageText + "\n\n";
                           setPdfProgress(Math.round((i / pdf.numPages) * 100));
                       }
 
                       if(fullText.trim().length < 50) {
-                          alert("ATENCIÓN: Se ha detectado muy poco texto. Es posible que este PDF sea una imagen escaneada (sin OCR) o esté protegido. La IA no podrá leerlo correctamente.");
+                          alert("ATENCIÓN: Se ha extraído muy poco texto. Es posible que el PDF use una codificación de fuente no estándar o esté protegido.");
                       }
 
-                      // 4. Guardamos en IndexedDB
-                      const fileId = `${editForm.id}_${Date.now()}`;
-                      await saveToDB(fileId, { text: fullText, fileData: base64String });
-                      
-                      const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                      const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                      setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
-                      setPdfProcessing(false);
+                      // 2. Para guardar, necesitamos el Base64 (DataURL)
+                      // Leemos el archivo una segunda vez como DataURL para asegurar integridad en el guardado
+                      const dataUrlReader = new FileReader();
+                      dataUrlReader.onload = async function(e2) {
+                          const base64String = e2.target.result;
+                          const fileId = `${editForm.id}_${Date.now()}`;
+                          await saveToDB(fileId, { text: fullText, fileData: base64String });
+                          
+                          const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
+                          const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
+                          setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
+                          setPdfProcessing(false);
+                      };
+                      dataUrlReader.readAsDataURL(file);
 
                   } catch (err) {
                       console.error(err);
@@ -413,7 +420,7 @@
                       setPdfProcessing(false);
                   }
               };
-              reader.readAsDataURL(file);
+              bufferReader.readAsArrayBuffer(file);
           };
 
           const handleDeleteFile = async (idx) => {
@@ -452,9 +459,6 @@
                       if(!win) {
                           alert("El navegador bloqueó la ventana emergente. Por favor, permite pop-ups para ver el PDF.");
                       }
-                      // Limpieza (opcional, pero buena práctica si el usuario cierra rápido, 
-                      // aunque para _blank mejor dejar que el navegador gestione el ciclo de vida del blob url un rato)
-                      // setTimeout(() => URL.revokeObjectURL(url), 60000); 
                   } else {
                       alert("Error: El archivo original no está disponible o está dañado.");
                   }

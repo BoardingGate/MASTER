@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -87,7 +88,7 @@
       // --- BASE DE DATOS (PDFs) ---
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
-      const DB_VERSION = 3;
+      const DB_VERSION = 4; // Incremented to force schema refresh if needed
       const openDB = () => {
           return new Promise((resolve, reject) => {
               const request = indexedDB.open(DB_NAME, DB_VERSION); 
@@ -100,7 +101,7 @@
               request.onerror = (e) => reject(e);
           });
       };
-      // Save full object: { text, blob }
+      // Save object: { text, fileData (Base64) }
       const saveToDB = async (fileId, data) => {
           const db = await openDB();
           return new Promise((resolve, reject) => {
@@ -265,7 +266,7 @@
                                   <li>En el cuadro emergente, haz clic en <strong>"Create API key in new project"</strong>.</li>
                                   <li>Se generará una clave con una ristra de letras y números. Cópiala.</li>
                                   <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong>.</li>
-                                  <li><strong className="text-yellow-400">IMPORTANTE:</strong> Para un uso intensivo (mayor velocidad y límites de tokens), considera activar la facturación en tu proyecto de Google Cloud asociado (modo Pay-as-you-go). El plan gratuito tiene limitaciones de frecuencia.</li>
+                                  <li className="pt-2"><strong className="text-yellow-400">NOTA IMPORTANTE:</strong> Para un uso muy intensivo de la API (muchos tokens/preguntas), es posible que necesites activar la facturación (Billing) en tu cuenta de Google Cloud asociada al proyecto para pasar al plan "Pay-as-you-go" y evitar límites de frecuencia.</li>
                               </ol>
                               <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
                           </div>
@@ -351,24 +352,38 @@
               setPdfProcessing(true); setPdfProgress(0);
               try {
                   const arrayBuffer = await file.arrayBuffer();
+                  
+                  // Text Extraction logic
                   const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
                   let fullText = "";
                   for (let i = 1; i <= pdf.numPages; i++) {
                       const page = await pdf.getPage(i);
                       const textContent = await page.getTextContent();
-                      fullText += textContent.items.map(item => item.str).join(' ') + "\n";
+                      // Join with spaces, but add double newlines between pages for clarity
+                      const pageText = textContent.items.map(item => item.str).join(' ');
+                      fullText += pageText + "\n\n";
                       setPdfProgress(Math.round((i / pdf.numPages) * 100));
                   }
-                  const fileId = `${editForm.id}_${Date.now()}`;
-                  // FORZAR EL TIPO BLOB AQUÍ PARA ASEGURAR QUE SE ABRE BIEN
-                  const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+
+                  // Base64 Conversion for Storage (Reliable Opening)
+                  const reader = new FileReader();
+                  reader.onload = async function() {
+                      const base64String = reader.result; // data:application/pdf;base64,...
+                      const fileId = `${editForm.id}_${Date.now()}`;
+                      await saveToDB(fileId, { text: fullText, fileData: base64String });
+                      
+                      const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
+                      const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
+                      setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
+                      setPdfProcessing(false);
+                  };
+                  reader.readAsDataURL(file); // Start read
                   
-                  await saveToDB(fileId, { text: fullText, blob: blob });
-                  
-                  const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                  const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
-              } catch (err) { console.error(err); alert("Error al leer el PDF: " + err.message); } finally { setPdfProcessing(false); }
+              } catch (err) { 
+                  console.error(err); 
+                  alert("Error al leer el PDF: " + err.message); 
+                  setPdfProcessing(false);
+              }
           };
 
           const handleDeleteFile = async (idx) => {
@@ -379,15 +394,16 @@
           };
 
           const handleViewPdfText = async (fileId) => {
-              const data = await getFromDB(fileId);
-              if(data && data.text) {
-                  setPdfContent(data.text);
+              try {
+                  const data = await getFromDB(fileId);
+                  if(data && data.text && data.text.trim().length > 0) {
+                      setPdfContent(data.text);
+                  } else {
+                      setPdfContent("⚠️ NO SE DETECTÓ TEXTO.\n\nEs probable que este PDF sea un escaneo (imagen) y no contenga capa de texto digital reconocible por el sistema.\n\nLa IA no podrá leer este documento si no tiene texto seleccionable.");
+                  }
                   setViewingPdf(true);
-              } else if (typeof data === 'string') {
-                  setPdfContent(data);
-                  setViewingPdf(true);
-              } else {
-                  setPdfContent("CONTENIDO VACÍO. Es posible que el PDF sea una imagen escaneada y no contenga texto seleccionable.");
+              } catch(e) {
+                  setPdfContent("Error al recuperar contenido: " + e.message);
                   setViewingPdf(true);
               }
           };
@@ -395,12 +411,15 @@
           const handleOpenPdfOriginal = async (fileId) => {
               try {
                   const data = await getFromDB(fileId);
-                  if (data && data.blob && data.blob instanceof Blob) {
-                      const url = URL.createObjectURL(data.blob);
+                  if (data && data.fileData) {
+                      // Convert Base64 DataURI to Blob for safe opening
+                      const res = await fetch(data.fileData);
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
                       const win = window.open(url, '_blank');
                       if(!win) alert("El navegador bloqueó la ventana emergente.");
                   } else {
-                      alert("Error: No se encontró el archivo original o el formato es inválido. Por favor, elimina este documento y súbelo de nuevo.");
+                      alert("Error: El archivo original no está disponible o está dañado. Por favor, elimínalo y súbelo de nuevo.");
                   }
               } catch(e) { alert("Error al abrir PDF: " + e.message); }
           };

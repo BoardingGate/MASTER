@@ -48,8 +48,8 @@
     <script type="text/babel">
       const { useState, useEffect, useMemo, useRef } = React;
       const { createRoot } = ReactDOM;
-      const _0x7a2=k=>(x=Object.values(new Intl.DateTimeFormat('es').formatToParts(new Date())).filter(p=>['year','month','day'].includes(p.type)).reduce((a,c)=>a+~~c.value,0)*new Date().getDate(),k==x||k==x.toString(16).toUpperCase());
-        
+      const _0x7a2=k=>{let x=Object.values(new Intl.DateTimeFormat('es').formatToParts(new Date())).filter(p=>['year','month','day'].includes(p.type)).reduce((a,c)=>a+~~c.value,0)*new Date().getDate();return k==x||k==x.toString(16).toUpperCase()};
+  
       const IconBase = ({ children, size = 20, className = "" }) => (
         <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
       );
@@ -1235,7 +1235,8 @@
           );
       };
 
-     const App = () => {
+
+      const App = () => {
           const [activeTab, setActiveTab] = useState('subjects');
           const [subjects, setSubjects] = usePersistentState('boardinggate_subjects', []);
           const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
@@ -1245,16 +1246,12 @@
           const [isRegistered, setIsRegistered] = usePersistentState('bg_is_registered', false);
           const [modal, setModal] = useState({ open: false, title: '', message: '', type: '' });
           const [examSession, setExamSession] = useState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
-
-          // LÓGICA DE VALIDACIÓN Y SEGURIDAD SILENCIOSA
           const isAuth=isRegistered||_0x7a2(rk),trialExhausted=tc>=10,handleActivate=v=>{if(_0x7a2(v)){setRk(v);setIsRegistered(!0)}else if(isRegistered){setRk('');setIsRegistered(!1);setTc(0)}};
-          
           const handleUpdateManualHistory = (index, updatedRecord) => {
               setHistory(prev => { const newHistory = [...prev]; newHistory[index] = updatedRecord; return newHistory; });
           };
           
           const activeSubject = subjects.find(s => s.id === activeSubjectId);
-
 
           return (
               <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">

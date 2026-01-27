@@ -874,11 +874,17 @@
           );
       };
 
-      const AIAnalysis = ({ results }) => {
+    
+    const AIAnalysis = ({ results, activeSubject, setSubjects }) => {
           const [analysis, setAnalysis] = useState(null);
           const [loading, setLoading] = useState(false);
           const [aiAdvice, setAiAdvice] = useState('');
           const [showAll, setShowAll] = useState(false);
+          
+          // Estados para Rebalanceo
+          const [showRebalance, setShowRebalance] = useState(false);
+          const [proposedWeights, setProposedWeights] = useState(null);
+          const [rebalanceMode, setRebalanceMode] = useState('smart'); // 'smart' or 'reset'
 
           useEffect(() => {
               if(!results.length) return;
@@ -890,28 +896,100 @@
                       aggregates[topic].h += stats.h; aggregates[topic].t += stats.t; aggregates[topic].exams++;
                   });
               });
-              const ranking = Object.entries(aggregates).map(([name, data]) => ({ name, rate: data.t > 0 ? (data.h/data.t)*100 : 0, count: data.t })).sort((a,b) => b.rate - a.rate);
-              setAnalysis(ranking);
-          }, [results]);
+              // Incluir temas del sujeto que quizás aun no se han tocado (0 intentos)
+              activeSubject.topics.forEach(t => {
+                  if(!aggregates[t.name]) aggregates[t.name] = { h:0, t:0, exams:0 };
+              });
 
-          const getAdvice = async () => {
+              const ranking = Object.entries(aggregates).map(([name, data]) => ({ 
+                  name, 
+                  rate: data.t > 0 ? (data.h/data.t)*100 : 0, 
+                  count: data.t 
+              })).sort((a,b) => a.rate - b.rate); // Orden ascendente (peores primero para el análisis interno)
+              setAnalysis(ranking);
+          }, [results, activeSubject]);
+
+          const askAI = async (prompt) => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
+              if(!apiKey) { alert("Falta API Key"); return null; }
               setLoading(true);
               try {
-                  const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}% (en ${i.count} pregs)`).join(', ');
-                  const text = await askGemini(JSON.parse(apiKey), `Actúa como tutor de oposiciones. Analiza rendimiento alumno por temas: [${summary}]. Dame 3 consejos MUY breves, concisos y directos sobre qué reforzar. Máximo 2 frases por consejo.`);
-                  setAiAdvice(text);
-              } catch(e) { alert(e.message); } finally { setLoading(false); }
+                  const text = await askGemini(JSON.parse(apiKey), prompt);
+                  return text;
+              } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
+          };
+
+          const getAdvice = async () => {
+              const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
+              const text = await askAI(`Actúa como tutor. Analiza rendimiento: [${summary}]. Dame 3 consejos MUY breves y directos. Máximo 2 frases.`);
+              if(text) setAiAdvice(text);
+          };
+
+          const handleGenerateProposal = async (mode) => {
+              setRebalanceMode(mode);
+              let prompt = "";
+              const currentTopicsJSON = JSON.stringify(activeSubject.topics.map(t => t.name));
+              
+              if (mode === 'smart') {
+                  const performanceSummary = analysis.map(i => `${i.name} (Acierto: ${i.rate.toFixed(0)}%, Preguntas hechas: ${i.count})`).join('; ');
+                  prompt = `Actúa como planificador de estudios experto. Tengo estos temas: ${currentTopicsJSON}. 
+                  Mi rendimiento histórico es: [${performanceSummary}].
+                  
+                  OBJETIVO: Rebalancear los pesos (%) del temario para el próximo simulacro.
+                  CRITERIO:
+                  1. Asigna MUCHO MÁS peso a los temas con PEOR tasa de acierto o con 0 preguntas hechas.
+                  2. Reduce drásticamente el peso de los temas que ya domino (>80% acierto).
+                  3. La suma total debe ser exactamente 100.
+                  
+                  Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...]`;
+              } else {
+                  prompt = `Actúa como experto en oposiciones. Para la materia "${activeSubject.type || activeSubject.name}", necesito la distribución de pesos ESTÁNDAR/OFICIAL basada en la importancia real de cada tema en los exámenes oficiales, ignorando mi rendimiento personal. Temas: ${currentTopicsJSON}. Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
+              }
+
+              const res = await askAI(prompt);
+              if(res) {
+                  const json = extractJSON(res);
+                  if(Array.isArray(json)) {
+                      // Fusionar con los temas existentes para asegurar consistencia
+                      const newWeights = json.map(item => ({ name: item.name, pct: item.pct }));
+                      setProposedWeights(newWeights);
+                      setShowRebalance(true);
+                  } else {
+                      alert("La IA no devolvió un formato válido. Inténtalo de nuevo.");
+                  }
+              }
+          };
+
+          const applyWeights = () => {
+              if(!proposedWeights) return;
+              setSubjects(prev => prev.map(s => {
+                  if(s.id === activeSubject.id) {
+                      // Mapear los nuevos pesos a los temas existentes
+                      const updatedTopics = s.topics.map(t => {
+                          const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name));
+                          return match ? { ...t, pct: match.pct } : t;
+                      });
+                      return { ...s, topics: updatedTopics };
+                  }
+                  return s;
+              }));
+              setShowRebalance(false);
+              alert("✅ Pesos actualizados. El próximo examen utilizará esta nueva distribución.");
           };
 
           if(!analysis || analysis.length === 0) return null;
           
+          // Revertimos para mostrar mejores arriba en la UI habitual
+          const visualRanking = [...analysis].reverse(); 
+
           return (
               <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-900/80 border-purple-500/30">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                       <h4 className="text-lg font-display font-bold text-purple-400 flex items-center gap-2"><Icons.BrainCircuit size={24}/> Análisis Inteligente</h4>
-                      <button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} PEDIR CONSEJO IA</button>
+                      <div className="flex gap-2">
+                          <button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} CONSEJO</button>
+                          <button onClick={() => handleGenerateProposal('smart')} disabled={loading} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all border border-blue-400">{loading ? <Icons.Loader/> : <Icons.Settings size={16}/>} RE-BALANCEAR</button>
+                      </div>
                   </div>
                   
                   {aiAdvice && (
@@ -921,14 +999,55 @@
                       </div>
                   )}
 
-                  {showAll ? (
-                      <div className="space-y-3">
-                          <div className="flex justify-between items-center mb-2">
-                              <h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5>
-                              <button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button>
+                  {showRebalance && proposedWeights && (
+                      <div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in">
+                          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                              <h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2">
+                                  {rebalanceMode === 'smart' ? <Icons.BrainCircuit size={16}/> : <Icons.Globe size={16}/>}
+                                  {rebalanceMode === 'smart' ? 'Propuesta de Refuerzo (Smart)' : 'Pesos Estándar (Original)'}
+                              </h5>
+                              <button onClick={() => handleGenerateProposal(rebalanceMode === 'smart' ? 'reset' : 'smart')} className="text-[10px] text-slate-400 underline hover:text-white">
+                                  {rebalanceMode === 'smart' ? 'Cambiar a Estándar' : 'Cambiar a Smart'}
+                              </button>
                           </div>
+                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2">
+                              <div>Tema</div>
+                              <div className="text-center">Actual</div>
+                              <div className="text-center">Propuesto</div>
+                          </div>
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">
+                              {activeSubject.topics.map((t, i) => {
+                                  const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name));
+                                  const newPct = match ? match.pct : t.pct;
+                                  const diff = newPct - t.pct;
+                                  return (
+                                      <div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                                          <div className="truncate text-xs text-white" title={t.name}>{t.name}</div>
+                                          <div className="text-center text-xs text-slate-400">{t.pct}%</div>
+                                          <div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                                              {newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}
+                                          </div>
+                                      </div>
+                                  )
+                              })}
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
+                              <button onClick={applyWeights} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">APLICAR CAMBIOS</button>
+                          </div>
+                      </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
+                      <div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
+                  </div>
+                  {visualRanking.length > 3 && !showAll && <div className="text-center pt-4"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}
+                  {showAll && (
+                      <div className="mt-4 pt-4 border-t border-slate-700 animate-fadeIn">
+                          <div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {analysis.map((item, i) => (
+                              {visualRanking.map((item, i) => (
                                   <div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700">
                                       <div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div>
                                       <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div>
@@ -936,20 +1055,15 @@
                               ))}
                           </div>
                       </div>
-                  ) : (
-                      <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{analysis.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
-                              <div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{analysis.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
-                          </div>
-                          {analysis.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}
-                      </div>
                   )}
               </div>
           );
       };
 
-      const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual }) => {
+      
+      
+      
+      const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects }) => {
           const [showGraph, setShowGraph] = useState(false);
           const [showManual, setShowManual] = useState(false);
           const [manualMode, setManualMode] = useState('create'); 
@@ -1029,7 +1143,6 @@
               const val = parseInt(value) || 0;
               const newInputs = { ...breakdownInputs, [topic]: { ...breakdownInputs[topic], [field]: val } };
               setBreakdownInputs(newInputs);
-              // Auto-sum to Global
               let totalH = 0, totalM = 0, totalS = 0;
               Object.values(newInputs).forEach(v => { totalH += (v.h || 0); totalM += (v.m || 0); totalS += (v.s || 0); });
               if (totalH > 0 || totalM > 0 || totalS > 0) {
@@ -1099,7 +1212,8 @@
                           </div>
                       )}
 
-                      {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} />}
+                      {/* PASAMOS SETSUBJECTS AQUÍ */}
+                      {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} setSubjects={setSubjects} />}
 
                       <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
                           <table className="w-full text-left">
@@ -1307,7 +1421,7 @@
                               />
                           )
                       )}
-                      {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} activeSubject={activeSubject} onAddManual={(r)=>setHistory(prev=>[r,...prev])} onUpdateManual={handleUpdateManualHistory} />}
+                      {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} activeSubject={activeSubject} onAddManual={(r)=>setHistory(prev=>[r,...prev])} onUpdateManual={handleUpdateManualHistory} setSubjects={setSubjects} />}
                       {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
                   </main>
               </div>

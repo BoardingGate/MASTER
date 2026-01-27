@@ -899,54 +899,113 @@
           );
       };
 
-    
-    const AIAnalysis = ({ results, activeSubject, setSubjects }) => {
+
+      const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
           const [analysis, setAnalysis] = useState(null);
           const [loading, setLoading] = useState(false);
           const [aiAdvice, setAiAdvice] = useState('');
           const [showAll, setShowAll] = useState(false);
           
-          // Estados para Rebalanceo
+          // Estados Consolidación
+          const [orphans, setOrphans] = useState([]);
+          const [showConsolidate, setShowConsolidate] = useState(false);
+          const [consolidationMap, setConsolidationMap] = useState({}); // { [orphanName]: { action: 'merge'|'add', target: 'TopicName', weight: 0 } }
+
+          // Estados Rebalanceo
           const [showRebalance, setShowRebalance] = useState(false);
           const [proposedWeights, setProposedWeights] = useState(null);
-          const [rebalanceMode, setRebalanceMode] = useState('smart'); // 'smart' or 'reset'
+          const [rebalanceMode, setRebalanceMode] = useState('smart');
 
           useEffect(() => {
-              if(!results.length) return;
+              if(!results.length && !activeSubject) return;
+
+              // 1. Detectar Huérfanos y Analizar
+              const activeTopicNames = activeSubject.topics.map(t => t.name);
+              const activeFileNames = (activeSubject.files || []).map(f => f.name);
+              const validItems = new Set([...activeTopicNames, ...activeFileNames]);
+              
               const aggregates = {};
+              const foundOrphans = new Set();
+
               results.forEach(r => {
                   if(!r.details || !r.details.topics) return;
                   Object.entries(r.details.topics).forEach(([topic, stats]) => {
-                      if(!aggregates[topic]) aggregates[topic] = { h:0, t:0, exams: 0 };
-                      aggregates[topic].h += stats.h; aggregates[topic].t += stats.t; aggregates[topic].exams++;
+                      if(validItems.has(topic)) {
+                          if(!aggregates[topic]) aggregates[topic] = { h:0, t:0, exams: 0 };
+                          aggregates[topic].h += stats.h; 
+                          aggregates[topic].t += stats.t; 
+                          aggregates[topic].exams++;
+                      } else {
+                          foundOrphans.add(topic);
+                      }
                   });
               });
-              // Incluir temas del sujeto que quizás aun no se han tocado (0 intentos)
-              activeSubject.topics.forEach(t => {
-                  if(!aggregates[t.name]) aggregates[t.name] = { h:0, t:0, exams:0 };
-              });
+
+              // Inicializar temas activos vacíos
+              activeTopicNames.forEach(name => { if(!aggregates[name]) aggregates[name] = { h:0, t:0, exams:0 }; });
+
+              // Preparar lógica de consolidación si hay huérfanos
+              if (foundOrphans.size > 0) {
+                  const initialMap = {};
+                  foundOrphans.forEach(orphan => {
+                      // Intento de auto-match (similitud de texto)
+                      const match = activeTopicNames.find(t => t.toLowerCase().includes(orphan.toLowerCase()) || orphan.toLowerCase().includes(t.toLowerCase()));
+                      initialMap[orphan] = { 
+                          action: match ? 'merge' : 'add', 
+                          target: match || '', 
+                          weight: 0 
+                      };
+                  });
+                  setOrphans(Array.from(foundOrphans));
+                  setConsolidationMap(initialMap);
+              } else {
+                  setOrphans([]);
+              }
 
               const ranking = Object.entries(aggregates).map(([name, data]) => ({ 
-                  name, 
-                  rate: data.t > 0 ? (data.h/data.t)*100 : 0, 
-                  count: data.t 
-              })).sort((a,b) => a.rate - b.rate); // Orden ascendente (peores primero para el análisis interno)
+                  name, rate: data.t > 0 ? (data.h/data.t)*100 : 0, count: data.t 
+              })).sort((a,b) => a.rate - b.rate);
+              
               setAnalysis(ranking);
           }, [results, activeSubject]);
+
+          const handleConsolidate = () => {
+              // Procesar el mapa de consolidación
+              const merges = {};
+              const additions = [];
+
+              orphans.forEach(orphan => {
+                  const decision = consolidationMap[orphan];
+                  if (decision.action === 'merge' && decision.target) {
+                      merges[orphan] = decision.target;
+                  } else if (decision.action === 'add') {
+                      additions.push({ name: orphan, pct: parseFloat(decision.weight) || 0 });
+                  }
+              });
+
+              onConsolidateHistory(merges, additions);
+              setOrphans([]); // Limpiar tras ejecutar
+              setShowConsolidate(false);
+          };
+
+          const updateConsolidation = (orphan, field, value) => {
+              setConsolidationMap(prev => ({
+                  ...prev,
+                  [orphan]: { ...prev[orphan], [field]: value }
+              }));
+          };
 
           const askAI = async (prompt) => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) { alert("Falta API Key"); return null; }
               setLoading(true);
-              try {
-                  const text = await askGemini(JSON.parse(apiKey), prompt);
-                  return text;
-              } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
+              try { const text = await askGemini(JSON.parse(apiKey), prompt); return text; } 
+              catch(e) { alert(e.message); return null; } finally { setLoading(false); }
           };
 
           const getAdvice = async () => {
               const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
-              const text = await askAI(`Actúa como tutor. Analiza rendimiento: [${summary}]. Dame 3 consejos MUY breves y directos. Máximo 2 frases.`);
+              const text = await askAI(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases.`);
               if(text) setAiAdvice(text);
           };
 
@@ -954,34 +1013,17 @@
               setRebalanceMode(mode);
               let prompt = "";
               const currentTopicsJSON = JSON.stringify(activeSubject.topics.map(t => t.name));
-              
               if (mode === 'smart') {
-                  const performanceSummary = analysis.map(i => `${i.name} (Acierto: ${i.rate.toFixed(0)}%, Preguntas hechas: ${i.count})`).join('; ');
-                  prompt = `Actúa como planificador de estudios experto. Tengo estos temas: ${currentTopicsJSON}. 
-                  Mi rendimiento histórico es: [${performanceSummary}].
-                  
-                  OBJETIVO: Rebalancear los pesos (%) del temario para el próximo simulacro.
-                  CRITERIO:
-                  1. Asigna MUCHO MÁS peso a los temas con PEOR tasa de acierto o con 0 preguntas hechas.
-                  2. Reduce drásticamente el peso de los temas que ya domino (>80% acierto).
-                  3. La suma total debe ser exactamente 100.
-                  
-                  Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...]`;
+                  const perfSummary = analysis.filter(i => activeSubject.topics.some(t => t.name === i.name))
+                      .map(i => `${i.name} (Ac: ${i.rate.toFixed(0)}%, N: ${i.count})`).join('; ');
+                  prompt = `Soy planificador. Temas: ${currentTopicsJSON}. Rendimiento: [${perfSummary}]. OBJETIVO: Rebalancear pesos (%) para próximo test. CRITERIO: Sube peso a peores notas/pocos datos. Baja a dominados. Suma 100. JSON array: [{"name": "Nombre", "pct": num}, ...]`;
               } else {
-                  prompt = `Actúa como experto en oposiciones. Para la materia "${activeSubject.type || activeSubject.name}", necesito la distribución de pesos ESTÁNDAR/OFICIAL basada en la importancia real de cada tema en los exámenes oficiales, ignorando mi rendimiento personal. Temas: ${currentTopicsJSON}. Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
+                  prompt = `Experto oposiciones. Materia: "${activeSubject.name}". Pesos ESTÁNDAR para: ${currentTopicsJSON}. JSON array: [{"name": "Nombre", "pct": num}, ...] (Suma 100)`;
               }
-
               const res = await askAI(prompt);
               if(res) {
                   const json = extractJSON(res);
-                  if(Array.isArray(json)) {
-                      // Fusionar con los temas existentes para asegurar consistencia
-                      const newWeights = json.map(item => ({ name: item.name, pct: item.pct }));
-                      setProposedWeights(newWeights);
-                      setShowRebalance(true);
-                  } else {
-                      alert("La IA no devolvió un formato válido. Inténtalo de nuevo.");
-                  }
+                  if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } else alert("Error formato IA");
               }
           };
 
@@ -989,7 +1031,6 @@
               if(!proposedWeights) return;
               setSubjects(prev => prev.map(s => {
                   if(s.id === activeSubject.id) {
-                      // Mapear los nuevos pesos a los temas existentes
                       const updatedTopics = s.topics.map(t => {
                           const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name));
                           return match ? { ...t, pct: match.pct } : t;
@@ -999,16 +1040,72 @@
                   return s;
               }));
               setShowRebalance(false);
-              alert("✅ Pesos actualizados. El próximo examen utilizará esta nueva distribución.");
+              alert("✅ Pesos actualizados.");
           };
 
           if(!analysis || analysis.length === 0) return null;
-          
-          // Revertimos para mostrar mejores arriba en la UI habitual
-          const visualRanking = [...analysis].reverse(); 
+          const visualRanking = [...analysis].reverse();
 
           return (
               <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-900/80 border-purple-500/30">
+                  {orphans.length > 0 && !showConsolidate && (
+                      <div className="mb-6 bg-yellow-900/20 border border-yellow-500/50 p-4 rounded-xl flex justify-between items-center animate-pulse-error">
+                          <div className="text-yellow-200 text-xs">
+                              <strong>⚠️ Datos Huérfanos Detectados:</strong> Hay {orphans.length} temas en el historial que no existen en la materia actual.
+                          </div>
+                          <button onClick={() => setShowConsolidate(true)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">CONSOLIDAR DATOS</button>
+                      </div>
+                  )}
+
+                  {showConsolidate && (
+                      <div className="mb-6 bg-slate-800 border-2 border-yellow-500/50 rounded-xl p-4 fade-in">
+                          <h4 className="text-sm font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Wand size={16}/> Asistente de Consolidación</h4>
+                          <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar mb-4">
+                              {orphans.map(orphan => (
+                                  <div key={orphan} className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                      <div className="flex justify-between items-center mb-2">
+                                          <span className="text-xs font-bold text-red-300 truncate" title={orphan}>{orphan}</span>
+                                          <select 
+                                              value={consolidationMap[orphan].action} 
+                                              onChange={(e) => updateConsolidation(orphan, 'action', e.target.value)}
+                                              className="bg-slate-800 text-white text-[10px] p-1 rounded border border-slate-600"
+                                          >
+                                              <option value="merge">Fusionar con existente</option>
+                                              <option value="add">Reactivar (Añadir)</option>
+                                              <option value="ignore">Ignorar (Ocultar)</option>
+                                          </select>
+                                      </div>
+                                      {consolidationMap[orphan].action === 'merge' && (
+                                          <select 
+                                              value={consolidationMap[orphan].target} 
+                                              onChange={(e) => updateConsolidation(orphan, 'target', e.target.value)}
+                                              className="w-full bg-slate-800 text-white text-xs p-2 rounded border border-slate-600"
+                                          >
+                                              <option value="">Selecciona tema destino...</option>
+                                              {activeSubject.topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                                          </select>
+                                      )}
+                                      {consolidationMap[orphan].action === 'add' && (
+                                          <div className="flex items-center gap-2">
+                                              <span className="text-[10px] text-slate-400">Peso nuevo (%):</span>
+                                              <input 
+                                                  type="number" 
+                                                  value={consolidationMap[orphan].weight} 
+                                                  onChange={(e) => updateConsolidation(orphan, 'weight', e.target.value)}
+                                                  className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs" 
+                                              />
+                                          </div>
+                                      )}
+                                  </div>
+                              ))}
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={() => setShowConsolidate(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
+                              <button onClick={handleConsolidate} className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded">APLICAR Y CORREGIR</button>
+                          </div>
+                      </div>
+                  )}
+
                   <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                       <h4 className="text-lg font-display font-bold text-purple-400 flex items-center gap-2"><Icons.BrainCircuit size={24}/> Análisis Inteligente</h4>
                       <div className="flex gap-2">
@@ -1017,76 +1114,23 @@
                       </div>
                   </div>
                   
-                  {aiAdvice && (
-                      <div className="mb-6 p-4 bg-purple-900/20 border border-purple-500/50 rounded-xl relative animate-pulse-error">
-                          <button onClick={() => setAiAdvice('')} className="absolute top-2 right-2 text-purple-300 hover:text-white"><Icons.XCircle size={18}/></button>
-                          <div className="text-sm text-purple-100 italic leading-relaxed whitespace-pre-wrap pr-6">{aiAdvice}</div>
-                      </div>
-                  )}
+                  {aiAdvice && <div className="mb-6 p-4 bg-purple-900/20 border border-purple-500/50 rounded-xl relative animate-pulse-error"><button onClick={() => setAiAdvice('')} className="absolute top-2 right-2 text-purple-300 hover:text-white"><Icons.XCircle size={18}/></button><div className="text-sm text-purple-100 italic leading-relaxed whitespace-pre-wrap pr-6">{aiAdvice}</div></div>}
 
                   {showRebalance && proposedWeights && (
                       <div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in">
-                          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                              <h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2">
-                                  {rebalanceMode === 'smart' ? <Icons.BrainCircuit size={16}/> : <Icons.Globe size={16}/>}
-                                  {rebalanceMode === 'smart' ? 'Propuesta de Refuerzo (Smart)' : 'Pesos Estándar (Original)'}
-                              </h5>
-                              <button onClick={() => handleGenerateProposal(rebalanceMode === 'smart' ? 'reset' : 'smart')} className="text-[10px] text-slate-400 underline hover:text-white">
-                                  {rebalanceMode === 'smart' ? 'Cambiar a Estándar' : 'Cambiar a Smart'}
-                              </button>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2">
-                              <div>Tema</div>
-                              <div className="text-center">Actual</div>
-                              <div className="text-center">Propuesto</div>
-                          </div>
-                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">
-                              {activeSubject.topics.map((t, i) => {
-                                  const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name));
-                                  const newPct = match ? match.pct : t.pct;
-                                  const diff = newPct - t.pct;
-                                  return (
-                                      <div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50">
-                                          <div className="truncate text-xs text-white" title={t.name}>{t.name}</div>
-                                          <div className="text-center text-xs text-slate-400">{t.pct}%</div>
-                                          <div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                                              {newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}
-                                          </div>
-                                      </div>
-                                  )
-                              })}
-                          </div>
-                          <div className="flex gap-2">
-                              <button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
-                              <button onClick={applyWeights} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">APLICAR CAMBIOS</button>
-                          </div>
+                          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2">{rebalanceMode === 'smart' ? <Icons.BrainCircuit size={16}/> : <Icons.Globe size={16}/>} {rebalanceMode === 'smart' ? 'Propuesta Refuerzo' : 'Pesos Estándar'}</h5><button onClick={() => handleGenerateProposal(rebalanceMode === 'smart' ? 'reset' : 'smart')} className="text-[10px] text-slate-400 underline hover:text-white">{rebalanceMode === 'smart' ? 'Cambiar a Estándar' : 'Cambiar a Smart'}</button></div>
+                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2"><div>Tema</div><div className="text-center">Actual</div><div className="text-center">Propuesto</div></div>
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">{activeSubject.topics.map((t, i) => { const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); const newPct = match ? match.pct : t.pct; const diff = newPct - t.pct; return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) })}</div>
+                          <div className="flex gap-2"><button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={applyWeights} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">APLICAR CAMBIOS</button></div>
                       </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
-                      <div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div>
-                  </div>
-                  {visualRanking.length > 3 && !showAll && <div className="text-center pt-4"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}
-                  {showAll && (
-                      <div className="mt-4 pt-4 border-t border-slate-700 animate-fadeIn">
-                          <div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {visualRanking.map((item, i) => (
-                                  <div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700">
-                                      <div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div>
-                                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  )}
+                  {showAll ? <div className="space-y-3"><div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visualRanking.map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div></div>))}</div></div> : <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div><div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div></div>{visualRanking.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}</div>}
               </div>
           );
       };
 
-      
-      const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects }) => {
+      const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {
           const [showGraph, setShowGraph] = useState(false);
           const [showManual, setShowManual] = useState(false);
           const [manualMode, setManualMode] = useState('create'); 
@@ -1096,6 +1140,56 @@
           const [viewMode, setViewMode] = useState('global'); 
           const [manualData, setManualData] = useState({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, skips: 0, timeMinutes: 0 });
           const [breakdownInputs, setBreakdownInputs] = useState({}); 
+
+          // Función central para consolidar datos (Pasa a AIAnalysis)
+          const executeConsolidation = (merges, additions) => {
+              if (Object.keys(merges).length > 0) {
+                  // Actualizar Historial: Renombrar temas
+                  setHistory(prevHistory => prevHistory.map(record => {
+                      if (!record.details || !record.details.topics) return record;
+                      const newTopics = { ...record.details.topics };
+                      Object.keys(merges).forEach(oldName => {
+                          if (newTopics[oldName]) {
+                              const newName = merges[oldName];
+                              // Fusionar datos si ya existía el nuevo
+                              if (newTopics[newName]) {
+                                  newTopics[newName].h += newTopics[oldName].h;
+                                  newTopics[newName].m += newTopics[oldName].m;
+                                  newTopics[newName].s += newTopics[oldName].s;
+                                  newTopics[newName].t += newTopics[oldName].t;
+                              } else {
+                                  newTopics[newName] = newTopics[oldName];
+                              }
+                              delete newTopics[oldName];
+                          }
+                      });
+                      return { ...record, details: { ...record.details, topics: newTopics } };
+                  }));
+              }
+
+              if (additions.length > 0) {
+                  // Actualizar Materia: Añadir temas
+                  setSubjects(prev => prev.map(s => {
+                      if (s.id === activeSubject.id) {
+                          const existingNames = new Set(s.topics.map(t => t.name));
+                          const newTopics = [...s.topics];
+                          additions.forEach(add => {
+                              if (!existingNames.has(add.name)) {
+                                  newTopics.push({ name: add.name, pct: add.pct });
+                              }
+                          });
+                          // Re-normalizar pesos si excede 100% (reducción proporcional simple)
+                          const totalPct = newTopics.reduce((sum, t) => sum + t.pct, 0);
+                          if (totalPct > 100) {
+                              const factor = 100 / totalPct;
+                              newTopics.forEach(t => t.pct = parseFloat((t.pct * factor).toFixed(2)));
+                          }
+                          return { ...s, topics: newTopics };
+                      }
+                      return s;
+                  }));
+              }
+          };
 
           const availableFilters = useMemo(() => {
               if(!results.length) return { sources: [], topics: [] };
@@ -1120,7 +1214,6 @@
           const stats = useMemo(() => {
               if (viewResults.length === 0) return null;
               const total = viewResults.length;
-              
               if (viewMode === 'global') {
                   const avgScore = viewResults.reduce((acc, r) => acc + (r.score || 0), 0) / total;
                   const avgPct = viewResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
@@ -1130,35 +1223,13 @@
                   const avgNetas = viewResults.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
                   const avgGlobalHitRate = viewResults.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
                   const avgTimeStr = formatTime(Math.round(viewResults.reduce((acc, r) => acc + (r.durationSeconds || 0), 0) / total));
-                  
-                  // New Totals Calculation for Global
                   const totalAnswered = viewResults.reduce((acc, r) => acc + (r.hits + r.misses), 0);
                   const totalSkipped = viewResults.reduce((acc, r) => acc + r.skips, 0);
-
-                  return { 
-                      total, avgScore, avgPct, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, avgTimeStr, 
-                      totalAnswered, totalSkipped,
-                      label: 'Puntos Medios', isPct: false, isGlobal: true 
-                  };
+                  return { total, avgScore, avgPct, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, avgTimeStr, totalAnswered, totalSkipped, label: 'Puntos Medios', isPct: false, isGlobal: true };
               } else {
-                  let sumRate = 0;
-                  let totalAnswered = 0;
-                  let totalSkipped = 0;
-
-                  viewResults.forEach(r => { 
-                      const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; 
-                      if(det && det.t > 0) {
-                          sumRate += (det.h / det.t) * 100; 
-                          // Accumulate totals for specific filter
-                          totalAnswered += (det.h + det.m);
-                          totalSkipped += det.s;
-                      }
-                  });
-                  return { 
-                      total, avgVal: sumRate / total, 
-                      totalAnswered, totalSkipped,
-                      label: 'Tasa Acierto Media', isPct: true, isGlobal: false 
-                  };
+                  let sumRate = 0, totalAnswered = 0, totalSkipped = 0;
+                  viewResults.forEach(r => { const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; if(det && det.t > 0) { sumRate += (det.h / det.t) * 100; totalAnswered += (det.h + det.m); totalSkipped += det.s; } });
+                  return { total, avgVal: sumRate / total, totalAnswered, totalSkipped, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
               }
           }, [viewResults, viewMode]);
 
@@ -1240,15 +1311,7 @@
                   <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-20">
                       {stats && (
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <div className="glass-panel p-3 rounded-xl">
-                                  <div className="text-xs text-slate-400 uppercase">Registros</div>
-                                  <div className="text-xl font-bold text-white">{stats.total}</div>
-                                  <div className="text-[9px] text-slate-500 mt-1 leading-tight font-mono">
-                                      <span className="text-slate-300">{stats.totalAnswered.toLocaleString('es-ES')}</span> resp.
-                                      <br/>
-                                      <span className="opacity-70">(omitidas {stats.totalSkipped.toLocaleString('es-ES')})</span>
-                                  </div>
-                              </div>
+                              <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">Registros</div><div className="text-xl font-bold text-white">{stats.total}</div><div className="text-[9px] text-slate-500 mt-1 leading-tight font-mono"><span className="text-slate-300">{stats.totalAnswered.toLocaleString('es-ES')}</span> resp.<br/><span className="opacity-70">(omitidas {stats.totalSkipped.toLocaleString('es-ES')})</span></div></div>
                               <div className="glass-panel p-3 rounded-xl"><div className="text-xs text-slate-400 uppercase">{stats.label}</div><div className={`text-xl font-bold ${stats.isPct ? 'text-green-400' : 'text-yellow-400'}`}>{stats.isGlobal ? stats.avgScore.toFixed(1) : stats.avgVal.toFixed(1)}{stats.isPct ? '%' : ''}</div></div>
                               {stats.isGlobal ? (
                                   <>
@@ -1268,7 +1331,7 @@
                           </div>
                       )}
 
-                      {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} setSubjects={setSubjects} />}
+                      {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} setSubjects={setSubjects} onConsolidateHistory={executeConsolidation} />}
 
                       <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
                           <table className="w-full text-left">
@@ -1432,6 +1495,8 @@
               </div>
           );
       };
+  
+
   
     
 

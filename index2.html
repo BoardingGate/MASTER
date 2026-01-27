@@ -535,7 +535,8 @@
               const totalMaxPoints = editForm.qCount * editForm.pointsHit;
               const cutOffPointsEq = totalMaxPoints > 0 ? (totalMaxPoints * (editForm.cutOffPct / 100)).toFixed(1) : 0;
               const lastCallPctEq = (totalMaxPoints > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / totalMaxPoints) * 100).toFixed(1) : 0;
-              const topicsTotalPct = editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0);
+              const topicsTotalPct = parseFloat(editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0).toFixed(2));
+
               const isLinkPdf = editForm.lastCallLink && editForm.lastCallLink.toLowerCase().endsWith('.pdf');
 
               return (
@@ -618,7 +619,7 @@
                                       <div key={idx} className="flex gap-2 items-center"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} /><input type="number" className="w-20 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right font-mono" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button></div>
                                   ))}
                               </div>
-                              <div className="flex justify-end items-center gap-4 text-xs font-bold border-t border-slate-700 pt-3"><span className="text-slate-400 uppercase tracking-widest">Suma Temas:</span><span className={`px-3 py-1 rounded ${topicsTotalPct === 100 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>{topicsTotalPct}% / 100%</span></div>
+                              <div className="flex justify-end items-center gap-4 text-xs font-bold border-t border-slate-700 pt-3"><span className="text-slate-400 uppercase tracking-widest">Suma Temas:</span><span className={`px-3 py-1 rounded ${topicsTotalPct === 100 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>{topicsTotalPct.toFixed(2)}% / 100%</span>
                           </div>
                           <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl mb-6 shadow-xl">
                               <h5 className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-[0.2em] text-center">PESO DE LAS PREGUNTAS DEL SIMULACRO (TOTAL 100%)</h5>

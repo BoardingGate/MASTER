@@ -655,13 +655,17 @@
           );
       };
 
-  const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+  
+const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
-          // Nuevo estado para el tipo de simulacro
           const [isReinforcement, setIsReinforcement] = useState(false);
           
+          // Estado para el modal de pesos temporales
+          const [showWeightsModal, setShowWeightsModal] = useState(false);
+          const [tempWeights, setTempWeights] = useState({ sources: [], topics: [] });
+
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
@@ -674,17 +678,58 @@
 
           useEffect(() => { if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) { if (questions.length - currentIndex < 5) loadNextBatch(); } }, [currentIndex, status, questions.length, batchQueue.length]);
 
-          const generateBatchPlan = () => {
+          // LÓGICA DE GENERACIÓN DE PLAN (Adaptada para pesos temporales)
+          const generateBatchPlan = (overrideWeights = null) => {
               const totalQs = activeSubject.qCount;
-              const files = activeSubject.files || [];
-              const lastCallWeight = activeSubject.includeLastCall ? (activeSubject.lastCallPct || 0) : 0;
               let plan = [];
-              files.forEach(f => { const count = Math.round((f.pct / 100) * totalQs); if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count }); });
-              const lastCallCount = Math.round((lastCallWeight / 100) * totalQs);
-              if(lastCallCount > 0) plan.push({ type: 'last_call', id: 'last_call', name: `Convocatoria ${activeSubject.lastCallDate}`, count: lastCallCount });
-              const currentTotal = plan.reduce((s,p) => s + p.count, 0);
-              const internetCount = Math.max(0, totalQs - currentTotal);
-              if(internetCount > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: internetCount });
+              
+              const sources = overrideWeights ? overrideWeights.sources : null;
+              const topics = overrideWeights ? overrideWeights.topics : null;
+
+              // 1. PDFs
+              const pdfs = activeSubject.files || [];
+              pdfs.forEach(f => {
+                  let pct = f.pct;
+                  if (sources) { const match = sources.find(s => s.id === f.id); if(match) pct = match.pct; }
+                  const count = Math.round((pct / 100) * totalQs);
+                  if(count > 0) plan.push({ type: 'pdf', id: f.id, name: f.name, count: count });
+              });
+
+              // 2. Última Convocatoria
+              if (activeSubject.includeLastCall) {
+                  let pct = activeSubject.lastCallPct || 0;
+                  if (sources) { const match = sources.find(s => s.type === 'last_call'); if(match) pct = match.pct; }
+                  const lastCallCount = Math.round((pct / 100) * totalQs);
+                  if(lastCallCount > 0) plan.push({ type: 'last_call', id: 'last_call', name: `Convocatoria ${activeSubject.lastCallDate}`, count: lastCallCount });
+              }
+
+              // 3. Internet (Topics)
+              const internetTopics = activeSubject.topics || [];
+              let internetTotalPct = 100 - (plan.reduce((sum, p) => sum + (sources ? sources.find(s => s.id === p.id || (s.type === 'last_call' && p.type === 'last_call'))?.pct || 0) : (pdfs.find(pdf => pdf.id === p.id)?.pct || activeSubject.lastCallPct || 0)), 0));
+              
+              // Si no hay pesos override, calculamos internet normal. Si los hay, usamos los del modal.
+              internetTopics.forEach(t => {
+                  let topicPctOfTotal = 0;
+                  if (topics) {
+                      const match = topics.find(mt => mt.name === t.name);
+                      topicPctOfTotal = match ? match.pct : 0;
+                  } else {
+                      // El peso en Materias es % relativo al bloque internet. Calculamos % absoluto:
+                      const totalSubjectWeights = activeSubject.files.reduce((s,f)=>s+f.pct, 0) + (activeSubject.includeLastCall ? activeSubject.lastCallPct : 0);
+                      const internetBlockPct = 100 - totalSubjectWeights;
+                      topicPctOfTotal = (t.pct / 100) * internetBlockPct;
+                  }
+                  
+                  const count = Math.round((topicPctOfTotal / 100) * totalQs);
+                  if(count > 0) plan.push({ type: 'internet', id: t.name, name: t.name, count: count });
+              });
+
+              // Ajuste final para asegurar exactitud qCount
+              let currentSum = plan.reduce((s,p) => s + p.count, 0);
+              if (currentSum !== totalQs && plan.length > 0) {
+                  plan[0].count += (totalQs - currentSum);
+              }
+
               let queue = [];
               plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
               return queue;
@@ -698,27 +743,64 @@
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '' };
                   if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
-                  const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
-                  if (uniqueNewQs.length > 0) { updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
+                  if (newQs.length > 0) { updateState({ questions: [...questions, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
                   else { updateState({ batchQueue: batchQueue.slice(1) }); }
-              } catch (e) { console.log(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
-          const startExam = async () => {
+          // INICIO DE EXAMEN
+          const handleStartClick = () => {
               if (!activeSubject || !apiKey) return alert("Configuración incompleta.");
-              if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite de simulacros. Registra la aplicación.");
+              
+              if (isReinforcement) {
+                  // Pre-cargar pesos: Mirar si hay propuesta de la IA en LocalStorage
+                  const aiProposal = window.localStorage.getItem(`bg_reinforcement_weights_${activeSubject.id}`);
+                  const savedWeights = aiProposal ? JSON.parse(aiProposal) : null;
+
+                  // Construir lista inicial para el modal
+                  const initialSources = [];
+                  activeSubject.files.forEach(f => initialSources.push({ id: f.id, name: f.name, pct: f.pct, type: 'pdf' }));
+                  if (activeSubject.includeLastCall) initialSources.push({ id: 'last_call', name: 'Última Convocatoria', pct: activeSubject.lastCallPct, type: 'last_call' });
+
+                  const initialTopics = activeSubject.topics.map(t => {
+                      // Si hay propuesta de la IA, usamos ese pct, si no, calculamos el pct absoluto actual
+                      let pct = 0;
+                      if (savedWeights) {
+                          const match = savedWeights.find(sw => sw.name === t.name);
+                          pct = match ? match.pct : 0;
+                      } else {
+                          const totalFixed = initialSources.reduce((s,f)=>s+f.pct,0);
+                          pct = parseFloat(((t.pct / 100) * (100 - totalFixed)).toFixed(2));
+                      }
+                      return { name: t.name, pct: pct };
+                  });
+
+                  setTempWeights({ sources: initialSources, topics: initialTopics });
+                  setShowWeightsModal(true);
+              } else {
+                  startExam();
+              }
+          };
+
+          const startExam = (overrideWeights = null) => {
+              if (!isAuth && trialCount >= 10) return alert("Límite de simulacros alcanzado.");
               if (!isAuth) setTc(prev => prev + 1);
-              const queue = generateBatchPlan();
-              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
-              isFetchingRef.current = true;
-              try {
-                  const firstBatch = queue[0];
-                  let sc = { type: firstBatch.type, name: firstBatch.name, content: '' };
-                  if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
-                  const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
-              } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+
+              const queue = generateBatchPlan(overrideWeights);
+              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Iniciando simulacro...', error: null });
+              setShowWeightsModal(false);
+
+              // Carga inicial (Lote 1)
+              (async () => {
+                  try {
+                      isFetchingRef.current = true;
+                      const firstBatch = queue[0];
+                      let sc = { type: firstBatch.type, name: firstBatch.name, content: '' };
+                      if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : ''; }
+                      const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
+                      updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
+                  } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { isFetchingRef.current = false; }
+              })();
           };
 
           const handleAnswer = (optionIdx) => {
@@ -728,22 +810,13 @@
           };
 
           const executeFinish = () => {
-              setShowFinishConfirm(false);
-              const { hits, misses, skips, points, maxPoints, percentage, details } = calculateStats();
-              const timeSpent = (activeSubject.timeMinutes * 60) - timeLeft; 
+              const { hits, misses, skips, points, percentage, details } = calculateStats();
               onSaveResult({ 
                   date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                  score: points, percentage, hits, misses, skips, total: activeSubject.qCount, durationSeconds: timeSpent, details,
-                  isReinforcement: isReinforcement // Guardamos la marca
+                  score: points, percentage, hits, misses, skips, total: activeSubject.qCount, 
+                  durationSeconds: (activeSubject.timeMinutes * 60) - timeLeft, details, isReinforcement 
               });
               updateState({ status: 'finished' });
-          };
-
-          const executeRestart = () => {
-              if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite de simulacros. Registra la aplicación.");
-              if (!isAuth) setTc(prev => prev + 1);
-              setShowRestartConfirm(false);
-              setSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
           };
 
           const calculateStats = () => {
@@ -751,29 +824,17 @@
               const details = { sources: {}, topics: {} };
               questions.forEach((q, idx) => {
                   const ans = answers[idx];
-                  let type = 'skip';
-                  if (ans === undefined || ans === -1) { skips++; type = 'skip'; } 
-                  else if (ans === q.correct) { hits++; type = 'hit'; } 
-                  else { misses++; type = 'miss'; }
+                  let type = ans === undefined || ans === -1 ? 'skip' : (ans === q.correct ? 'hit' : 'miss');
+                  if(type==='hit') hits++; else if(type==='miss') misses++; else skips++;
                   const originKey = q.origin || "Desconocido";
                   if(!details.sources[originKey]) details.sources[originKey] = { h:0, m:0, s:0, t:0 };
-                  details.sources[originKey].t++;
-                  if(type==='hit') details.sources[originKey].h++;
-                  if(type==='miss') details.sources[originKey].m++;
-                  if(type==='skip') details.sources[originKey].s++;
+                  details.sources[originKey].t++; details.sources[originKey][type==='hit'?'h':type==='miss'?'m':'s']++;
                   const topicKey = q.topic || "General";
                   if(!details.topics[topicKey]) details.topics[topicKey] = { h:0, m:0, s:0, t:0 };
-                  details.topics[topicKey].t++;
-                  if(type==='hit') details.topics[topicKey].h++;
-                  if(type==='miss') details.topics[topicKey].m++;
-                  if(type==='skip') details.topics[topicKey].s++;
+                  details.topics[topicKey].t++; details.topics[topicKey][type==='hit'?'h':type==='miss'?'m':'s']++;
               });
-              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
-              const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
-              return { hits, misses, skips, points, maxPoints, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0, details };
+              return { hits, misses, skips, points: (hits*activeSubject.pointsHit)+(misses*activeSubject.pointsMiss), percentage: (hits/activeSubject.qCount)*100, details };
           };
-
-          const stats = useMemo(() => status !== 'idle' ? calculateStats() : {}, [answers, questions]);
 
           if (status === 'idle') return (
               <div className="h-full flex flex-col items-center justify-center p-6 text-center">
@@ -782,23 +843,92 @@
                           <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                           <p className="text-slate-400 mb-8">{activeSubject.type}</p>
                           <div className="flex justify-center gap-4 mb-8">
-                               {activeSubject.files?.length > 0 ? <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div> : null}
+                               {activeSubject.files?.length > 0 && <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>}
                                {activeSubject.includeLastCall && <div className="bg-purple-900/30 border border-purple-500/50 px-4 py-2 rounded-lg text-sm text-purple-200 flex items-center gap-2"><Icons.Clock size={18}/> Convocatoria</div>}
                           </div>
                           
-                          {/* CHECK DE REFUERZO */}
                           <div className="mb-8 p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-left">
                               <label className="flex items-center gap-3 cursor-pointer mb-2">
                                   <input type="checkbox" checked={isReinforcement} onChange={e => setIsReinforcement(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" />
-                                  <span className="font-bold text-yellow-100">SIMULACRO DE REFUERZO ESPECÍFICO DE TEMAS CONCRETOS</span>
+                                  <span className="font-bold text-yellow-100">SIMULACRO DE REFUERZO ESPECÍFICO</span>
                               </label>
-                              <p className="text-[11px] text-yellow-500/80 italic ml-8 leading-tight">
-                                  * Estos simulacros <strong>no computarán</strong> el dato de PUNTOS, NETAS en el historial global y no se verán en las gráficas de evolución general.
-                              </p>
+                              <p className="text-[11px] text-yellow-500/80 italic ml-8 leading-tight">* No computará en puntos/netas globales ni en gráficas de evolución general.</p>
                           </div>
 
-                          {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm animate-pulse-error">{error}</div>}
-                          <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
+                          <button onClick={handleStartClick} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02] shadow-xl">
+                              <Icons.Play size={24}/> COMENZAR
+                          </button>
+                      </div>
+                  )}
+
+                  {/* MODAL DE REBALANCER TEMPORAL */}
+                  {showWeightsModal && (
+                      <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4">
+                          <div className="bg-slate-900 border border-yellow-500/50 p-6 rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl">
+                              <div className="flex justify-between items-center mb-4 shrink-0">
+                                  <h3 className="text-xl font-bold text-yellow-500 flex items-center gap-2"><Icons.Settings size={24}/> Configurar Pesos de Refuerzo</h3>
+                                  <button onClick={() => setShowWeightsModal(false)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button>
+                              </div>
+                              
+                              <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg mb-4 text-xs text-blue-200 italic leading-relaxed shrink-0">
+                                  ℹ️ Los pesos que indiques aquí <strong>solo se utilizarán para este simulacro</strong>. No variarán los datos originales de tu materia de oposición.
+                              </div>
+
+                              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                                  {/* FUENTES */}
+                                  <div>
+                                      <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Fuentes y Documentos</h4>
+                                      <div className="space-y-2">
+                                          {tempWeights.sources.map((s, i) => (
+                                              <div key={i} className="flex items-center gap-3 bg-slate-800/50 p-2 rounded border border-slate-700">
+                                                  <span className="flex-1 text-xs text-white truncate">{s.name}</span>
+                                                  <input type="number" value={s.pct} onChange={e => {
+                                                      const newS = [...tempWeights.sources]; newS[i].pct = parseFloat(e.target.value) || 0;
+                                                      setTempWeights({...tempWeights, sources: newS});
+                                                  }} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-yellow-400 font-bold text-xs" />
+                                                  <span className="text-[10px] text-slate-500 w-4">%</span>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  </div>
+
+                                  {/* TEMAS INTERNET */}
+                                  <div>
+                                      <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Temas Individuales (Internet/IA)</h4>
+                                      <div className="space-y-2">
+                                          {tempWeights.topics.map((t, i) => (
+                                              <div key={i} className="flex items-center gap-3 bg-slate-800/50 p-2 rounded border border-slate-700">
+                                                  <span className="flex-1 text-xs text-white truncate">{t.name}</span>
+                                                  <input type="number" value={t.pct} onChange={e => {
+                                                      const newT = [...tempWeights.topics]; newT[i].pct = parseFloat(e.target.value) || 0;
+                                                      setTempWeights({...tempWeights, topics: newT});
+                                                  }} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-yellow-400 font-bold text-xs" />
+                                                  <span className="text-[10px] text-slate-500 w-4">%</span>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <div className="mt-6 pt-4 border-t border-slate-800 shrink-0">
+                                  <div className="flex justify-between items-center mb-4 px-2">
+                                      <span className="text-xs font-bold text-slate-400">SUMA TOTAL:</span>
+                                      <span className={`text-sm font-bold ${Math.abs(tempWeights.sources.reduce((s,f)=>s+f.pct,0) + tempWeights.topics.reduce((s,t)=>s+t.pct,0) - 100) < 0.1 ? 'text-green-400' : 'text-red-400'}`}>
+                                          {(tempWeights.sources.reduce((s,f)=>s+f.pct,0) + tempWeights.topics.reduce((s,t)=>s+t.pct,0)).toFixed(2)}% / 100%
+                                      </span>
+                                  </div>
+                                  <button 
+                                      onClick={() => {
+                                          const total = tempWeights.sources.reduce((s,f)=>s+f.pct,0) + tempWeights.topics.reduce((s,t)=>s+t.pct,0);
+                                          if (Math.abs(total - 100) > 0.1) return alert("La suma de pesos debe ser 100%");
+                                          startExam(tempWeights);
+                                      }}
+                                      className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg transition-all"
+                                  >
+                                      INICIAR REFUERZO
+                                  </button>
+                              </div>
+                          </div>
                       </div>
                   )}
               </div>
@@ -809,16 +939,8 @@
           const currentQ = questions[currentIndex];
           const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
           const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
-          const totalExamSeconds = activeSubject.timeMinutes * 60;
-          const avgTimePerQuestion = totalExamSeconds / activeSubject.qCount;
-          const actualTimeSpent = totalExamSeconds - timeLeft;
-          const paceSeconds = (currentIndex * avgTimePerQuestion) - actualTimeSpent;
-          const paceAbs = Math.abs(paceSeconds);
-          const paceM = Math.floor(paceAbs / 60).toString().padStart(2, '0');
-          const paceS = Math.floor(paceAbs % 60).toString().padStart(2, '0');
-          const paceString = `${paceSeconds >= 0 ? '+' : '-'}${paceM}:${paceS}`;
-          const answeredCount = Object.keys(answers).length;
-          const progressPct = ((answeredCount / activeSubject.qCount) * 100).toFixed(1);
+          const paceAbs = Math.abs((currentIndex * ((activeSubject.timeMinutes * 60) / activeSubject.qCount)) - (activeSubject.timeMinutes * 60 - timeLeft));
+          const paceString = `${(currentIndex * ((activeSubject.timeMinutes * 60) / activeSubject.qCount)) - (activeSubject.timeMinutes * 60 - timeLeft) >= 0 ? '+' : '-'}${Math.floor(paceAbs/60).toString().padStart(2,'0')}:${Math.floor(paceAbs%60).toString().padStart(2,'0')}`;
 
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
@@ -827,19 +949,12 @@
                           <div className="flex items-center gap-8">
                               <div className="flex items-center gap-3">
                                   <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
-                                  <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
+                                  <div className={`text-xs font-bold ${paceString.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
                               </div>
-                              <div className="w-px h-8 bg-slate-700"></div>
-                              <div className="hidden sm:block leading-tight">
-                                  <div className="text-xl font-bold text-white leading-none">
-                                      {currentIndex + 1} <span className="text-slate-500 text-lg">/ {activeSubject.qCount}</span> 
-                                      <span className="text-sm font-mono text-blue-400 font-normal ml-2">[{progressPct}%]</span>
-                                  </div>
-                              </div>
+                              <div className="text-xl font-bold text-white leading-none">{currentIndex + 1} <span className="text-slate-500 text-lg">/ {activeSubject.qCount}</span></div>
                           </div>
                           <div className="flex gap-2">
                               <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
-                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
                               <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
                           </div>
                       </div>
@@ -849,15 +964,14 @@
                               <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
                               <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
                               <div className="bg-indigo-900/20 border border-indigo-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-indigo-400 uppercase font-bold">[Netas]</div><div className="text-xs font-bold text-indigo-300">{stats.hits - stats.misses}</div></div>
-                              <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{((stats.maxPoints * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
+                              <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{((activeSubject.qCount * activeSubject.pointsHit * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
                           </div>
                           <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-[0_0_10px_rgba(234,179,8,0.1)]">
                               <div className="text-3xl font-display font-bold text-yellow-400 leading-none mb-1">{stats.points.toFixed(1)}</div>
                               <div className="text-[9px] text-yellow-500/80 uppercase font-bold leading-none">Puntos</div>
-                              <div className="text-[10px] text-yellow-200/60 font-bold mt-1">Tasa: {((stats.hits / activeSubject.qCount) * 100).toFixed(1)}%</div>
                           </div>
                       </div>
-                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / stats.maxPoints) * 100}%`}}></div></div>
+                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%`}}></div></div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
@@ -908,50 +1022,39 @@
                   {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">{Array.from({length: activeSubject.qCount}).map((_, i) => { let bg = "bg-slate-800 text-slate-500 border-slate-700"; const ans = answers[i]; if (i < questions.length && ans !== undefined) { if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; else bg = "bg-red-900/60 text-red-400 border-red-500"; } else if (i >= questions.length) { bg = "opacity-30 border-dashed border-slate-800"; } return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button> })}</div></div></div>}
               </div>
           );
-      };   
+      };
 
-   const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
+        
+  const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
           const [analysis, setAnalysis] = useState(null);
           const [loading, setLoading] = useState(false);
           const [aiAdvice, setAiAdvice] = useState('');
           const [showAll, setShowAll] = useState(false);
-          // Estados Consolidación (Restaurados)
           const [orphans, setOrphans] = useState([]);
           const [showConsolidate, setShowConsolidate] = useState(false);
           const [consolidationMap, setConsolidationMap] = useState({});
-          // Estados Rebalanceo
           const [showRebalance, setShowRebalance] = useState(false);
           const [proposedWeights, setProposedWeights] = useState(null);
           const [rebalanceMode, setRebalanceMode] = useState('smart');
 
           useEffect(() => {
               if(!results.length && !activeSubject) return;
-              
               const activeTopicNames = activeSubject.topics.map(t => t.name);
               const activeFileNames = (activeSubject.files || []).map(f => f.name);
               const validItems = new Set([...activeTopicNames, ...activeFileNames]);
               const aggregates = {};
               const foundOrphans = new Set();
-
               results.forEach(r => {
-                  // Si es de refuerzo, NO lo usamos para análisis de IA (para no sesgar)
                   if(r.isReinforcement) return; 
-
                   if(!r.details || !r.details.topics) return;
                   Object.entries(r.details.topics).forEach(([topic, stats]) => {
                       if(validItems.has(topic)) {
                           if(!aggregates[topic]) aggregates[topic] = { h:0, t:0, exams: 0 };
                           aggregates[topic].h += stats.h; aggregates[topic].t += stats.t; aggregates[topic].exams++;
-                      } else {
-                          foundOrphans.add(topic);
-                      }
+                      } else { foundOrphans.add(topic); }
                   });
               });
-
-              // Añadir temas actuales vacíos
               activeTopicNames.forEach(name => { if(!aggregates[name]) aggregates[name] = { h:0, t:0, exams:0 }; });
-
-              // Lógica de Consolidación
               if (foundOrphans.size > 0) {
                   const initialMap = {};
                   foundOrphans.forEach(orphan => {
@@ -960,7 +1063,6 @@
                   });
                   setOrphans(Array.from(foundOrphans)); setConsolidationMap(initialMap);
               } else { setOrphans([]); }
-
               const ranking = Object.entries(aggregates).map(([name, data]) => ({ name, rate: data.t > 0 ? (data.h/data.t)*100 : 0, count: data.t })).sort((a,b) => a.rate - b.rate);
               setAnalysis(ranking);
           }, [results, activeSubject]);
@@ -996,20 +1098,19 @@
               const currentTopicsJSON = JSON.stringify(activeSubject.topics.map(t => t.name));
               if (mode === 'smart') {
                   const perfSummary = analysis.filter(i => activeSubject.topics.some(t => t.name === i.name)).map(i => `${i.name} (Ac: ${i.rate.toFixed(0)}%, N: ${i.count})`).join('; ');
-                  prompt = `Soy planificador. Temas: ${currentTopicsJSON}. Rendimiento: [${perfSummary}]. OBJETIVO: Rebalancear pesos (%) para próximo test. CRITERIO: Sube peso a peores notas/pocos datos. Baja a dominados. Suma 100. JSON array: [{"name": "Nombre", "pct": num}, ...]`;
-              } else { prompt = `Experto oposiciones. Materia: "${activeSubject.name}". Pesos ESTÁNDAR para: ${currentTopicsJSON}. JSON array: [{"name": "Nombre", "pct": num}, ...] (Suma 100)`; }
+                  prompt = `Soy planificador. Temas: ${currentTopicsJSON}. Rendimiento: [${perfSummary}]. OBJETIVO: Rebalancear pesos (%) para próximo test de REFUERZO. CRITERIO: Sube peso a peores notas. Suma 100. JSON array: [{"name": "Nombre", "pct": num}, ...]`;
+              } else { prompt = `Pesos oficiales para: ${currentTopicsJSON}. JSON array: [{"name": "Nombre", "pct": num}, ...] (Suma 100)`; }
               const res = await askAI(prompt);
               if(res) { const json = extractJSON(res); if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } else alert("Error formato IA"); }
           };
 
+          // LÓGICA MODIFICADA: NO MODIFICA MATERIA GLOBAL, GUARDA PROPUESTA PARA REFUERZO
           const applyWeights = () => {
               if(!proposedWeights) return;
-              setSubjects(prev => prev.map(s => {
-                  if(s.id === activeSubject.id) {
-                      const updatedTopics = s.topics.map(t => { const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); return match ? { ...t, pct: match.pct } : t; });
-                      return { ...s, topics: updatedTopics };
-                  } return s;
-              })); setShowRebalance(false); alert("✅ Pesos actualizados.");
+              const storageKey = `bg_reinforcement_weights_${activeSubject.id}`;
+              window.localStorage.setItem(storageKey, JSON.stringify(proposedWeights));
+              setShowRebalance(false);
+              alert("✅ Propuesta guardada. Cuando inicies un 'Simulacro de Refuerzo' en la pestaña Examen, estos pesos aparecerán pre-cargados.");
           };
 
           if(!analysis || analysis.length === 0) return null;
@@ -1017,19 +1118,23 @@
 
           return (
               <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-900/80 border-purple-500/30">
-                  {orphans.length > 0 && !showConsolidate && (<div className="mb-6 bg-yellow-900/20 border border-yellow-500/50 p-4 rounded-xl flex justify-between items-center animate-pulse-error"><div className="text-yellow-200 text-xs"><strong>⚠️ Datos Huérfanos Detectados:</strong> Hay {orphans.length} temas en el historial que no existen en la materia actual.</div><button onClick={() => setShowConsolidate(true)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">CONSOLIDAR DATOS</button></div>)}
-                  {showConsolidate && (<div className="mb-6 bg-slate-800 border-2 border-yellow-500/50 rounded-xl p-4 fade-in"><h4 className="text-sm font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Wand size={16}/> Asistente de Consolidación</h4><div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar mb-4">{orphans.map(orphan => (<div key={orphan} className="bg-slate-900/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-red-300 truncate" title={orphan}>{orphan}</span><select value={consolidationMap[orphan].action} onChange={(e) => updateConsolidation(orphan, 'action', e.target.value)} className="bg-slate-800 text-white text-[10px] p-1 rounded border border-slate-600"><option value="merge">Fusionar con existente</option><option value="add">Reactivar (Añadir)</option><option value="ignore">Ignorar (Ocultar)</option></select></div>{consolidationMap[orphan].action === 'merge' && (<select value={consolidationMap[orphan].target} onChange={(e) => updateConsolidation(orphan, 'target', e.target.value)} className="w-full bg-slate-800 text-white text-xs p-2 rounded border border-slate-600"><option value="">Selecciona tema destino...</option>{activeSubject.topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}</select>)}{consolidationMap[orphan].action === 'add' && (<div className="flex items-center gap-2"><span className="text-[10px] text-slate-400">Peso nuevo (%):</span><input type="number" value={consolidationMap[orphan].weight} onChange={(e) => updateConsolidation(orphan, 'weight', e.target.value)} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs" /></div>)}</div>))}</div><div className="flex gap-2"><button onClick={() => setShowConsolidate(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={handleConsolidate} className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded">APLICAR Y CORREGIR</button></div></div>)}
+                  {orphans.length > 0 && !showConsolidate && (<div className="mb-6 bg-yellow-900/20 border border-yellow-500/50 p-4 rounded-xl flex justify-between items-center animate-pulse-error"><div className="text-yellow-200 text-xs"><strong>⚠️ Datos Huérfanos:</strong> Temas en historial no existentes hoy.</div><button onClick={() => setShowConsolidate(true)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">CONSOLIDAR</button></div>)}
+                  {showConsolidate && (<div className="mb-6 bg-slate-800 border-2 border-yellow-500/50 rounded-xl p-4 fade-in"><h4 className="text-sm font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Wand size={16}/> Asistente de Consolidación</h4><div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar mb-4">{orphans.map(orphan => (<div key={orphan} className="bg-slate-900/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-red-300 truncate" title={orphan}>{orphan}</span><select value={consolidationMap[orphan].action} onChange={(e) => updateConsolidation(orphan, 'action', e.target.value)} className="bg-slate-800 text-white text-[10px] p-1 rounded border border-slate-600"><option value="merge">Fusionar con existente</option><option value="add">Reactivar (Añadir)</option><option value="ignore">Ignorar</option></select></div>{consolidationMap[orphan].action === 'merge' && (<select value={consolidationMap[orphan].target} onChange={(e) => updateConsolidation(orphan, 'target', e.target.value)} className="w-full bg-slate-800 text-white text-xs p-2 rounded border border-slate-600"><option value="">Selecciona tema destino...</option>{activeSubject.topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}</select>)}{consolidationMap[orphan].action === 'add' && (<div className="flex items-center gap-2"><span className="text-[10px] text-slate-400">Peso (%):</span><input type="number" value={consolidationMap[orphan].weight} onChange={(e) => updateConsolidation(orphan, 'weight', e.target.value)} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs" /></div>)}</div>))}</div><div className="flex gap-2"><button onClick={() => setShowConsolidate(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={handleConsolidate} className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded">APLICAR Y CORREGIR</button></div></div>)}
+                  
                   <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                       <h4 className="text-lg font-display font-bold text-purple-400 flex items-center gap-2"><Icons.BrainCircuit size={24}/> Análisis Inteligente</h4>
-                      <div className="flex gap-2"><button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} CONSEJO</button><button onClick={() => handleGenerateProposal('smart')} disabled={loading} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all border border-blue-400">{loading ? <Icons.Loader/> : <Icons.Settings size={16}/>} RE-BALANCEAR</button></div>
+                      <div className="flex gap-2">
+                          <button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} CONSEJO</button>
+                          <button onClick={() => handleGenerateProposal('smart')} disabled={loading} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all border border-blue-400">{loading ? <Icons.Loader/> : <Icons.Settings size={16}/>} RE-BALANCEAR</button>
+                      </div>
                   </div>
-                  {aiAdvice && <div className="mb-6 p-4 bg-purple-900/20 border border-purple-500/50 rounded-xl relative animate-pulse-error"><button onClick={() => setAiAdvice('')} className="absolute top-2 right-2 text-purple-300 hover:text-white"><Icons.XCircle size={18}/></button><div className="text-sm text-purple-100 italic leading-relaxed whitespace-pre-wrap pr-6">{aiAdvice}</div></div>}
-                  {showRebalance && proposedWeights && (<div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in"><div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2">{rebalanceMode === 'smart' ? <Icons.BrainCircuit size={16}/> : <Icons.Globe size={16}/>} {rebalanceMode === 'smart' ? 'Propuesta Refuerzo' : 'Pesos Estándar'}</h5><button onClick={() => handleGenerateProposal(rebalanceMode === 'smart' ? 'reset' : 'smart')} className="text-[10px] text-slate-400 underline hover:text-white">{rebalanceMode === 'smart' ? 'Cambiar a Estándar' : 'Cambiar a Smart'}</button></div><div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2"><div>Tema</div><div className="text-center">Actual</div><div className="text-center">Propuesto</div></div><div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">{activeSubject.topics.map((t, i) => { const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); const newPct = match ? match.pct : t.pct; const diff = newPct - t.pct; return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) })}</div><div className="flex gap-2"><button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={applyWeights} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">APLICAR CAMBIOS</button></div></div>)}
+
+                  {showRebalance && proposedWeights && (<div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in"><div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2"><Icons.BrainCircuit size={16}/> {rebalanceMode === 'smart' ? 'Propuesta Refuerzo (Smart)' : 'Pesos Estándar'}</h5><button onClick={() => handleGenerateProposal(rebalanceMode === 'smart' ? 'reset' : 'smart')} className="text-[10px] text-slate-400 underline hover:text-white">{rebalanceMode === 'smart' ? 'Ver Estándar' : 'Ver Smart'}</button></div><div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2"><div>Tema</div><div className="text-center">Actual</div><div className="text-center">Propuesto</div></div><div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">{activeSubject.topics.map((t, i) => { const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); const newPct = match ? match.pct : t.pct; const diff = newPct - t.pct; return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) })}</div><div className="flex gap-2"><button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={applyWeights} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">PROPONER PARA REFUERZO</button></div></div>)}
                   
-                  {showAll ? <div className="space-y-3"><div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visualRanking.map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div></div>))}</div></div> : <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div><div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div></div>{visualRanking.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}</div>}
+                  {showAll ? <div className="space-y-3 fade-in"><div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visualRanking.map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div></div>))}</div></div> : <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div><div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div></div>{visualRanking.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}</div>}
               </div>
           );
-      }; 
+      };
     
 
     const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {

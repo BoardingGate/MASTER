@@ -655,7 +655,7 @@
           );
       };
 
-  
+
 const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
@@ -1023,9 +1023,10 @@ const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, tri
               </div>
           );
       };
-
         
-  const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
+  
+
+const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
           const [analysis, setAnalysis] = useState(null);
           const [loading, setLoading] = useState(false);
           const [aiAdvice, setAiAdvice] = useState('');

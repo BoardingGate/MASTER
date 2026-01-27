@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -13,7 +15,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- PDF.js - Versión Robusta y Estable -->
+    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -258,6 +260,7 @@
           });
       };
 
+      // --- SETTINGS TAB ---
       const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
@@ -281,32 +284,13 @@
               } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
           };
 
-          const handleRunExport = async () => {
-              setIoStatus('processing');
-              const success = await exportLiteBackup();
-              setIoStatus(success ? 'success' : 'error');
-              setTimeout(() => setIoStatus('idle'), 3000);
-          };
-
+          const handleRunExport = async () => { setIoStatus('processing'); const success = await exportLiteBackup(); setIoStatus(success ? 'success' : 'error'); setTimeout(() => setIoStatus('idle'), 3000); };
           const handleRunImport = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
-              if(!confirm("⚠️ IMPORTANTE:\n\nEsta acción reemplazará toda tu configuración actual.\n\nAl ser una copia ligera, los archivos PDF NO están incluidos. Tras restaurar, deberás ir a cada materia, borrar las referencias a los archivos antiguos y volver a subirlos manualmente.\n\n¿Deseas continuar?")) {
-                  e.target.value = null;
-                  return;
-              }
+              if(!confirm("⚠️ IMPORTANTE:\n\nEsta acción reemplazará toda tu configuración actual.\n\nAl ser una copia ligera, los archivos PDF NO están incluidos. Tras restaurar, deberás ir a cada materia, borrar las referencias a los archivos antiguos y volver a subirlos manualmente.\n\n¿Deseas continuar?")) { e.target.value = null; return; }
               setIoStatus('processing');
-              try {
-                  await importLiteBackup(file);
-                  setIoStatus('success');
-                  alert("Configuración restaurada.\n\nRecuerda: Ve a 'Configuración Materia' y vuelve a cargar tus documentos PDF.");
-                  window.location.reload();
-              } catch (err) {
-                  console.error(err);
-                  setIoStatus('error');
-                  alert("Error al importar: El archivo no es válido.");
-              }
-              e.target.value = null;
+              try { await importLiteBackup(file); setIoStatus('success'); alert("Configuración restaurada.\n\nRecuerda: Ve a 'Configuración Materia' y vuelve a cargar tus documentos PDF."); window.location.reload(); } catch (err) { console.error(err); setIoStatus('error'); alert("Error al importar: El archivo no es válido."); } e.target.value = null;
           };
 
           return (
@@ -337,6 +321,18 @@
                                   <button onClick={testConnection} className={`h-[46px] px-6 rounded-xl border font-bold text-sm ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>{testStatus === 'loading' ? <Icons.Loader/> : 'PROBAR CONEXIÓN'}</button>
                               </div>
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
+                              
+                              {/* HELP BLOCK RESTORED */}
+                              <div className="mt-4 p-4 bg-slate-800 rounded-xl border border-slate-700">
+                                  <h4 className="text-sm font-bold text-slate-300 mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener tu API Key?</h4>
+                                  <ol className="list-decimal list-inside text-xs text-slate-400 space-y-1 ml-1">
+                                      <li>Ve a <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-400 hover:underline">Google AI Studio</a>.</li>
+                                      <li>Inicia sesión con tu cuenta de Google.</li>
+                                      <li>Pulsa en <strong>"Create API key"</strong>.</li>
+                                      <li>Copia la clave (empieza por <code>AIzaSy...</code>) y pégala arriba.</li>
+                                  </ol>
+                                  <p className="text-[10px] text-slate-500 mt-2 italic">Es gratuito para uso personal (hasta 60 peticiones/minuto).</p>
+                              </div>
                           </div>
                       </div>
                   </div>
@@ -919,7 +915,8 @@
           const [filterStart, setFilterStart] = useState('2020-01-01');
           const [filterEnd, setFilterEnd] = useState('2099-12-31');
           const [viewMode, setViewMode] = useState('global'); 
-          const [manualData, setManualData] = useState({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, timeMinutes: 0, specificTopic: 'global' });
+          const [manualData, setManualData] = useState({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, timeMinutes: 0 });
+          const [breakdownInputs, setBreakdownInputs] = useState({}); // { [topic]: {h:0, m:0} }
 
           const availableFilters = useMemo(() => {
               if(!results.length) return { sources: [], topics: [] };
@@ -952,7 +949,7 @@
                   const avgSkips = viewResults.reduce((acc, r) => acc + r.skips, 0) / total;
                   const avgNetas = viewResults.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
                   const avgGlobalHitRate = viewResults.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
-                  const avgTimeStr = formatTime(viewResults.reduce((acc, r) => acc + (r.durationSeconds || 0), 0) / total);
+                  const avgTimeStr = formatTime(Math.round(viewResults.reduce((acc, r) => acc + (r.durationSeconds || 0), 0) / total));
                   return { total, avgScore, avgPct, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, avgTimeStr, label: 'Puntos Medios', isPct: false, isGlobal: true };
               } else {
                   let sumRate = 0;
@@ -961,19 +958,41 @@
               }
           }, [viewResults, viewMode]);
 
+          const allPossibleTopics = useMemo(() => {
+              if (!activeSubject) return [];
+              const t = activeSubject.topics.map(t => t.name);
+              const f = activeSubject.files ? activeSubject.files.map(f => f.name) : [];
+              return [...t, ...f];
+          }, [activeSubject]);
+
           const openManualModal = (mode, data = null, idx = -1) => {
               setManualMode(mode);
+              setBreakdownInputs({});
               if (mode === 'edit' && data) { 
-                  setManualData({ 
-                      date: new Date(data.date).toISOString().slice(0,10), hits: data.hits, misses: data.misses, 
-                      timeMinutes: data.durationSeconds ? Math.round(data.durationSeconds / 60) : 0, 
-                      specificTopic: 'global' // Edits always default to global logic for simplicity 
-                  }); 
+                  setManualData({ date: new Date(data.date).toISOString().slice(0,10), hits: data.hits, misses: data.misses, timeMinutes: data.durationSeconds ? Math.round(data.durationSeconds / 60) : 0 }); 
                   setEditingIndex(idx); 
+                  // If detailed data exists, populate breakdownInputs (simplified: ideally would map from details)
               } else { 
-                  setManualData({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, timeMinutes: activeSubject ? activeSubject.timeMinutes : 0, specificTopic: 'global' }); 
+                  setManualData({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, timeMinutes: activeSubject ? activeSubject.timeMinutes : 0 }); 
+                  // Initialize breakdown to 0 for all topics
+                  const initialBreakdown = {};
+                  allPossibleTopics.forEach(t => initialBreakdown[t] = { h: '', m: '' });
+                  setBreakdownInputs(initialBreakdown);
               }
               setShowManual(true);
+          };
+
+          const handleBreakdownChange = (topic, field, value) => {
+              const val = parseInt(value) || 0;
+              const newInputs = { ...breakdownInputs, [topic]: { ...breakdownInputs[topic], [field]: val } };
+              setBreakdownInputs(newInputs);
+              
+              // Auto-sum to Global
+              let totalH = 0, totalM = 0;
+              Object.values(newInputs).forEach(v => { totalH += (v.h || 0); totalM += (v.m || 0); });
+              if (totalH > 0 || totalM > 0) {
+                  setManualData(prev => ({ ...prev, hits: totalH, misses: totalM }));
+              }
           };
 
           const handleSaveManual = () => {
@@ -983,11 +1002,13 @@
               const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
               
               const details = { sources: {}, topics: {} };
-              // If user selected a specific topic for this manual entry, we attribute stats to it
-              if(manualData.specificTopic !== 'global') {
-                  const tKey = manualData.specificTopic;
-                  details.topics[tKey] = { h: hits, m: misses, s: skips, t: hits+misses+skips };
-              }
+              // Populate details from breakdown inputs
+              Object.entries(breakdownInputs).forEach(([topic, val]) => {
+                  const h = val.h || 0; const m = val.m || 0;
+                  if (h > 0 || m > 0) {
+                      details.topics[topic] = { h, m, s: 0, t: h + m }; // Simplified assumption: specific items have 0 skips or skips are implicit
+                  }
+              });
 
               const newRecord = { 
                   date: new Date(manualData.date).toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
@@ -1144,27 +1165,46 @@
 
                   {showManual && (
                       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 fade-in">
-                          <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
-                              <h3 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4">{manualMode === 'create' ? 'Nuevo Registro' : 'Editar Registro'}</h3>
-                              <div className="space-y-4">
-                                  <div><label className="block text-xs text-slate-400 mb-1">Fecha</label><input type="date" value={manualData.date} onChange={e=>setManualData({...manualData, date: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white" /></div>
-                                  <div><label className="block text-xs text-slate-400 mb-1">Tiempo (Minutos)</label><input type="number" value={manualData.timeMinutes} onChange={e=>setManualData({...manualData, timeMinutes: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-mono" /></div>
-                                  
-                                  <div className="bg-slate-800/50 p-3 rounded border border-slate-600">
-                                      <label className="block text-xs text-blue-300 mb-2 font-bold uppercase">Desglose por Temas (Opcional)</label>
-                                      <select value={manualData.specificTopic} onChange={e=>setManualData({...manualData, specificTopic: e.target.value})} className="w-full bg-slate-900 border border-blue-500 text-white text-xs p-2 rounded mb-2">
-                                          <option value="global">Registro Global (Todo el examen)</option>
-                                          {availableFilters.topics.map(t => <option key={t} value={t}>Solo: {t}</option>)}
-                                      </select>
-                                      {manualData.specificTopic !== 'global' && <p className="text-[10px] text-yellow-400 italic">Los datos introducidos abajo se asignarán únicamente al tema "{manualData.specificTopic}".</p>}
+                          <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+                              <h3 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4 shrink-0">{manualMode === 'create' ? 'Nuevo Registro' : 'Editar Registro'}</h3>
+                              
+                              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-2">
+                                  {/* GLOBAL SECTION */}
+                                  <div className="space-y-4">
+                                      <div><label className="block text-xs text-slate-400 mb-1">Fecha</label><input type="date" value={manualData.date} onChange={e=>setManualData({...manualData, date: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white" /></div>
+                                      <div><label className="block text-xs text-slate-400 mb-1">Tiempo (Minutos)</label><input type="number" value={manualData.timeMinutes} onChange={e=>setManualData({...manualData, timeMinutes: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-mono" /></div>
+                                      <div className="grid grid-cols-3 gap-4">
+                                          <div><label className="block text-xs text-green-400 mb-1 font-bold">Total Aciertos</label><input type="number" value={manualData.hits} onChange={e=>setManualData({...manualData, hits: e.target.value})} className="w-full bg-slate-800 border border-green-900 rounded p-2 text-green-400 font-bold" /></div>
+                                          <div><label className="block text-xs text-red-400 mb-1 font-bold">Total Fallos</label><input type="number" value={manualData.misses} onChange={e=>setManualData({...manualData, misses: e.target.value})} className="w-full bg-slate-800 border border-red-900 rounded p-2 text-red-400 font-bold" /></div>
+                                      </div>
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-4">
-                                      <div><label className="block text-xs text-green-400 mb-1 font-bold">Aciertos</label><input type="number" value={manualData.hits} onChange={e=>setManualData({...manualData, hits: e.target.value})} className="w-full bg-slate-800 border border-green-900 rounded p-2 text-green-400 font-bold" /></div>
-                                      <div><label className="block text-xs text-red-400 mb-1 font-bold">Fallos</label><input type="number" value={manualData.misses} onChange={e=>setManualData({...manualData, misses: e.target.value})} className="w-full bg-slate-800 border border-red-900 rounded p-2 text-red-400 font-bold" /></div>
-                                  </div>
+                                  {/* DETAILS SECTION */}
+                                  {allPossibleTopics.length > 0 && manualMode === 'create' && (
+                                      <div className="border-t border-slate-700 pt-4">
+                                          <h4 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center justify-between">
+                                              <span>Desglose por Temas</span>
+                                              <span className="text-[9px] text-slate-500 font-normal normal-case">La suma actualiza el total arriba</span>
+                                          </h4>
+                                          <div className="space-y-2">
+                                              {allPossibleTopics.map((topic, i) => (
+                                                  <div key={i} className="flex items-center gap-2 bg-slate-800/30 p-2 rounded">
+                                                      <span className="flex-1 text-[10px] text-white truncate" title={topic}>{topic}</span>
+                                                      <input type="number" placeholder="Ac" className="w-12 bg-black border border-green-900/50 rounded p-1 text-right text-green-400 text-xs" 
+                                                          onChange={e => handleBreakdownChange(topic, 'h', e.target.value)} />
+                                                      <input type="number" placeholder="Fa" className="w-12 bg-black border border-red-900/50 rounded p-1 text-right text-red-400 text-xs" 
+                                                          onChange={e => handleBreakdownChange(topic, 'm', e.target.value)} />
+                                                  </div>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  )}
                               </div>
-                              <div className="flex gap-4 mt-8"><button onClick={() => setShowManual(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSaveManual} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar</button></div>
+
+                              <div className="flex gap-4 mt-6 shrink-0 pt-4 border-t border-slate-800">
+                                  <button onClick={() => setShowManual(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button>
+                                  <button onClick={handleSaveManual} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar</button>
+                              </div>
                           </div>
                       </div>
                   )}

@@ -205,15 +205,152 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-      // --- COMPONENTES PRINCIPALES ---
+// --- HELPERS IMPORT/EXPORT ---
+      
+      // Convierte un Blob a Base64 string para guardarlo en JSON
+      const blobToBase64 = (blob) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
 
-      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+      // Convierte Base64 string a Blob para restaurarlo en IndexedDB
+      const base64ToBlob = async (base64Data) => {
+        const res = await fetch(base64Data);
+        return await res.blob();
+      };
+
+      const exportFullBackup = async () => {
+          try {
+              // 1. Recopilar LocalStorage (Solo las keys de la app)
+              const lsData = {};
+              const keysToKeep = ['boardinggate_subjects', 'boardinggate_history', 'boardinggate_active_sub', 'gemini_api_key', 'gemini_model', 'bg_app_rk_st', 'bg_app_tc_st', 'bg_is_registered'];
+              keysToKeep.forEach(key => {
+                  const val = localStorage.getItem(key);
+                  if(val) lsData[key] = JSON.parse(val);
+              });
+
+              // 2. Recopilar IndexedDB (PDFs)
+              const db = await openDB();
+              const idbData = [];
+              
+              await new Promise((resolve, reject) => {
+                  const tx = db.transaction(DB_STORE, 'readonly');
+                  const store = tx.objectStore(DB_STORE);
+                  const request = store.openCursor();
+                  
+                  request.onsuccess = async (event) => {
+                      const cursor = event.target.result;
+                      if (cursor) {
+                          const record = cursor.value;
+                          // Convertir el Blob del archivo a Base64
+                          let fileBase64 = null;
+                          if (record.fileData instanceof Blob) {
+                              fileBase64 = await blobToBase64(record.fileData);
+                          }
+                          
+                          idbData.push({
+                              id: cursor.key,
+                              text: record.text,
+                              fileBase64: fileBase64
+                          });
+                          cursor.continue();
+                      } else {
+                          resolve();
+                      }
+                  };
+                  request.onerror = (e) => reject(e);
+              });
+
+              // 3. Crear el paquete final
+              const backup = {
+                  version: 1,
+                  date: new Date().toISOString(),
+                  localStorage: lsData,
+                  indexedDB: idbData
+              };
+
+              // 4. Descargar archivo
+              const blob = new Blob([JSON.stringify(backup)], {type: "application/json"});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `BoardingGate_Backup_${new Date().toISOString().slice(0,10)}.json`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              
+              return true;
+          } catch (e) {
+              console.error(e);
+              alert("Error al exportar: " + e.message);
+              return false;
+          }
+      };
+
+      const importFullBackup = async (file) => {
+          return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                  try {
+                      const backup = JSON.parse(e.target.result);
+                      
+                      // 1. Restaurar LocalStorage
+                      if (backup.localStorage) {
+                          Object.keys(backup.localStorage).forEach(key => {
+                              localStorage.setItem(key, JSON.stringify(backup.localStorage[key]));
+                          });
+                      }
+
+                      // 2. Restaurar IndexedDB
+                      if (backup.indexedDB && Array.isArray(backup.indexedDB)) {
+                          const db = await openDB();
+                          const tx = db.transaction(DB_STORE, 'readwrite');
+                          const store = tx.objectStore(DB_STORE);
+                          
+                          // Limpiar DB actual para evitar conflictos
+                          await new Promise((res, rej) => {
+                              const req = store.clear();
+                              req.onsuccess = res;
+                              req.onerror = rej;
+                          });
+
+                          // Insertar registros
+                          for (const record of backup.indexedDB) {
+                              let fileBlob = null;
+                              if (record.fileBase64) {
+                                  fileBlob = await base64ToBlob(record.fileBase64);
+                              }
+                              store.put({ text: record.text, fileData: fileBlob }, record.id);
+                          }
+                      }
+                      
+                      resolve(true);
+                  } catch (err) {
+                      reject(err);
+                  }
+              };
+              reader.readAsText(file);
+          });
+      };
+
+
+        
+    
+    const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
           const [showKey, setShowKey] = useState(false);
           const [testStatus, setTestStatus] = useState(null); 
           const [errorDetail, setErrorDetail] = useState('');
           const [localLic, setLocalLic] = useState('');
+          
+          // Estados para import/export
+          const [ioStatus, setIoStatus] = useState('idle'); // idle, processing, success, error
 
           const testConnection = async () => {
               if(!apiKey) return alert("Introduce una clave primero.");
@@ -230,8 +367,40 @@
               } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
           };
 
+          const handleRunExport = async () => {
+              setIoStatus('processing');
+              const success = await exportFullBackup();
+              setIoStatus(success ? 'success' : 'error');
+              setTimeout(() => setIoStatus('idle'), 3000);
+          };
+
+          const handleRunImport = async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              
+              if(!confirm("⚠️ ATENCIÓN: Al importar una copia de seguridad, SE BORRARÁN todos los datos actuales (materias, historial y configuración) y se reemplazarán por los del archivo. ¿Deseas continuar?")) {
+                  e.target.value = null;
+                  return;
+              }
+
+              setIoStatus('processing');
+              try {
+                  await importFullBackup(file);
+                  setIoStatus('success');
+                  alert("Copia de seguridad restaurada correctamente. La aplicación se recargará ahora.");
+                  window.location.reload();
+              } catch (err) {
+                  console.error(err);
+                  setIoStatus('error');
+                  alert("Error al importar: El archivo está dañado o no es válido.");
+              }
+              e.target.value = null;
+          };
+
           return (
               <div className="h-full p-6 flex flex-col items-center justify-start fade-in overflow-y-auto">
+                  
+                  {/* --- CONFIGURACIÓN IA --- */}
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
@@ -276,6 +445,37 @@
                       </div>
                   </div>
 
+                  {/* --- GESTIÓN DE DATOS (NUEVO) --- */}
+                  <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
+                      <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
+                          <div className="p-3 bg-cyan-500/20 rounded-xl text-cyan-400"><Icons.Save size={32} /></div>
+                          <div><h2 className="text-2xl font-bold text-white">Gestión de Datos</h2><p className="text-slate-400 text-sm">Copia de seguridad completa (Materias + PDFs + Historial)</p></div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <p className="text-sm text-slate-300">
+                             Guarda un archivo <code>.json</code> con toda tu configuración, PDFs y progreso. Útil para cambiar de navegador o dispositivo.
+                          </p>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <button 
+                                  onClick={handleRunExport} 
+                                  disabled={ioStatus === 'processing'}
+                                  className={`flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-slate-800 border-slate-600 hover:bg-slate-700 text-white'}`}
+                              >
+                                  {ioStatus === 'processing' ? <Icons.Loader size={20}/> : <Icons.Upload size={20} className="rotate-180" />} 
+                                  {ioStatus === 'processing' ? 'Procesando...' : 'EXPORTAR COPIA'}
+                              </button>
+
+                              <label className={`cursor-pointer flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'processing' ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'bg-blue-600 border-blue-500 hover:bg-blue-500 text-white'}`}>
+                                  <input type="file" accept=".json" className="hidden" onChange={handleRunImport} disabled={ioStatus === 'processing'} />
+                                  <Icons.Upload size={20} /> RESTAURAR COPIA
+                              </label>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* --- REGISTRO DE APP --- */}
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-20">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className={`p-3 rounded-xl ${isAuth ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}><Icons.CheckCircle size={32} /></div>
@@ -306,8 +506,7 @@
               </div>
           );
       };
-
-
+        
         
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);

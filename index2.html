@@ -205,80 +205,44 @@
           return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       };
 
-// --- HELPERS IMPORT/EXPORT ---
+        
+      // --- HELPERS IMPORT/EXPORT (LITE / SIN PDFS) ---
       
-      // Convierte un Blob a Base64 string para guardarlo en JSON
-      const blobToBase64 = (blob) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      };
-
-      // Convierte Base64 string a Blob para restaurarlo en IndexedDB
-      const base64ToBlob = async (base64Data) => {
-        const res = await fetch(base64Data);
-        return await res.blob();
-      };
-
-      const exportFullBackup = async () => {
+      const exportLiteBackup = async () => {
           try {
-              // 1. Recopilar LocalStorage (Solo las keys de la app)
+              // 1. Recopilar LocalStorage (Solo datos de configuración y estructura)
               const lsData = {};
-              const keysToKeep = ['boardinggate_subjects', 'boardinggate_history', 'boardinggate_active_sub', 'gemini_api_key', 'gemini_model', 'bg_app_rk_st', 'bg_app_tc_st', 'bg_is_registered'];
+              // Definimos qué claves queremos guardar
+              const keysToKeep = [
+                  'boardinggate_subjects', 
+                  'boardinggate_history', 
+                  'boardinggate_active_sub', 
+                  'gemini_api_key', 
+                  'gemini_model', 
+                  'bg_app_rk_st', 
+                  'bg_app_tc_st', 
+                  'bg_is_registered'
+              ];
+              
               keysToKeep.forEach(key => {
                   const val = localStorage.getItem(key);
                   if(val) lsData[key] = JSON.parse(val);
               });
 
-              // 2. Recopilar IndexedDB (PDFs)
-              const db = await openDB();
-              const idbData = [];
-              
-              await new Promise((resolve, reject) => {
-                  const tx = db.transaction(DB_STORE, 'readonly');
-                  const store = tx.objectStore(DB_STORE);
-                  const request = store.openCursor();
-                  
-                  request.onsuccess = async (event) => {
-                      const cursor = event.target.result;
-                      if (cursor) {
-                          const record = cursor.value;
-                          // Convertir el Blob del archivo a Base64
-                          let fileBase64 = null;
-                          if (record.fileData instanceof Blob) {
-                              fileBase64 = await blobToBase64(record.fileData);
-                          }
-                          
-                          idbData.push({
-                              id: cursor.key,
-                              text: record.text,
-                              fileBase64: fileBase64
-                          });
-                          cursor.continue();
-                      } else {
-                          resolve();
-                      }
-                  };
-                  request.onerror = (e) => reject(e);
-              });
-
-              // 3. Crear el paquete final
+              // 2. Crear el paquete final (Metadata solamente)
               const backup = {
+                  type: 'lite_backup',
                   version: 1,
                   date: new Date().toISOString(),
-                  localStorage: lsData,
-                  indexedDB: idbData
+                  localStorage: lsData
               };
 
-              // 4. Descargar archivo
-              const blob = new Blob([JSON.stringify(backup)], {type: "application/json"});
+              // 3. Descargar archivo
+              const blob = new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"});
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `BoardingGate_Backup_${new Date().toISOString().slice(0,10)}.json`;
+              a.download = `BoardingGate_Config_${new Date().toISOString().slice(0,10)}.json`;
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
@@ -292,41 +256,31 @@
           }
       };
 
-      const importFullBackup = async (file) => {
+      const importLiteBackup = async (file) => {
           return new Promise((resolve, reject) => {
               const reader = new FileReader();
               reader.onload = async (e) => {
                   try {
                       const backup = JSON.parse(e.target.result);
                       
-                      // 1. Restaurar LocalStorage
-                      if (backup.localStorage) {
-                          Object.keys(backup.localStorage).forEach(key => {
-                              localStorage.setItem(key, JSON.stringify(backup.localStorage[key]));
-                          });
-                      }
+                      // Validación básica
+                      if (!backup.localStorage) throw new Error("Archivo no válido o corrupto.");
 
-                      // 2. Restaurar IndexedDB
-                      if (backup.indexedDB && Array.isArray(backup.indexedDB)) {
+                      // 1. Restaurar LocalStorage
+                      Object.keys(backup.localStorage).forEach(key => {
+                          localStorage.setItem(key, JSON.stringify(backup.localStorage[key]));
+                      });
+
+                      // 2. Limpiar IndexedDB (PDFs antiguos)
+                      // Como la copia no trae los PDFs, es mejor limpiar la caché de archivos
+                      // para no dejar "archivos fantasma" ocupando espacio.
+                      try {
                           const db = await openDB();
                           const tx = db.transaction(DB_STORE, 'readwrite');
                           const store = tx.objectStore(DB_STORE);
-                          
-                          // Limpiar DB actual para evitar conflictos
-                          await new Promise((res, rej) => {
-                              const req = store.clear();
-                              req.onsuccess = res;
-                              req.onerror = rej;
-                          });
-
-                          // Insertar registros
-                          for (const record of backup.indexedDB) {
-                              let fileBlob = null;
-                              if (record.fileBase64) {
-                                  fileBlob = await base64ToBlob(record.fileBase64);
-                              }
-                              store.put({ text: record.text, fileData: fileBlob }, record.id);
-                          }
+                          store.clear(); // Borramos todo el contenido pesado antiguo
+                      } catch (dbErr) {
+                          console.warn("No se pudo limpiar la DB antigua, no es crítico:", dbErr);
                       }
                       
                       resolve(true);
@@ -339,9 +293,8 @@
       };
 
 
-        
-    
-    const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+      
+      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
           const [showKey, setShowKey] = useState(false);
@@ -350,7 +303,7 @@
           const [localLic, setLocalLic] = useState('');
           
           // Estados para import/export
-          const [ioStatus, setIoStatus] = useState('idle'); // idle, processing, success, error
+          const [ioStatus, setIoStatus] = useState('idle');
 
           const testConnection = async () => {
               if(!apiKey) return alert("Introduce una clave primero.");
@@ -369,7 +322,7 @@
 
           const handleRunExport = async () => {
               setIoStatus('processing');
-              const success = await exportFullBackup();
+              const success = await exportLiteBackup();
               setIoStatus(success ? 'success' : 'error');
               setTimeout(() => setIoStatus('idle'), 3000);
           };
@@ -378,21 +331,23 @@
               const file = e.target.files[0];
               if (!file) return;
               
-              if(!confirm("⚠️ ATENCIÓN: Al importar una copia de seguridad, SE BORRARÁN todos los datos actuales (materias, historial y configuración) y se reemplazarán por los del archivo. ¿Deseas continuar?")) {
+              const confirmMsg = "⚠️ IMPORTANTE:\n\nEsta acción reemplazará toda tu configuración actual.\n\nAl ser una copia ligera, los archivos PDF NO están incluidos. Tras restaurar, deberás ir a cada materia, borrar las referencias a los archivos antiguos y volver a subirlos manualmente.\n\n¿Deseas continuar?";
+              
+              if(!confirm(confirmMsg)) {
                   e.target.value = null;
                   return;
               }
 
               setIoStatus('processing');
               try {
-                  await importFullBackup(file);
+                  await importLiteBackup(file);
                   setIoStatus('success');
-                  alert("Copia de seguridad restaurada correctamente. La aplicación se recargará ahora.");
+                  alert("Configuración restaurada.\n\nRecuerda: Ve a 'Configuración Materia' y vuelve a cargar tus documentos PDF.");
                   window.location.reload();
               } catch (err) {
                   console.error(err);
                   setIoStatus('error');
-                  alert("Error al importar: El archivo está dañado o no es válido.");
+                  alert("Error al importar: El archivo no es válido.");
               }
               e.target.value = null;
           };
@@ -428,50 +383,40 @@
                               </div>
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                           </div>
-                          
-                          <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
-                              <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2"><Icons.HelpCircle size={16}/> ¿Cómo obtener la API Key?</h4>
-                              <ol className="text-sm text-slate-300 space-y-3 list-decimal pl-4 mb-4">
-                                  <li>Accede a <strong>Google AI Studio</strong> con tu cuenta de Google (botón abajo).</li>
-                                  <li>Si es tu primera vez, acepta los términos de uso.</li>
-                                  <li>Haz clic en el botón azul <strong>"Get API key"</strong> en la esquina superior izquierda.</li>
-                                  <li>En el cuadro emergente, haz clic en <strong>"Create API key in new project"</strong>.</li>
-                                  <li>Se generará una clave con una ristra de letras y números. Cópiala.</li>
-                                  <li>Vuelve aquí y <strong>pega la clave en el campo "Google Gemini API Key"</strong>.</li>
-                                  <li className="pt-2"><strong className="text-yellow-400">NOTA IMPORTANTE:</strong> Para un uso muy intensivo de la API (muchos tokens/preguntas), es posible que necesites activar la facturación (Billing) en tu cuenta de Google Cloud asociada al proyecto para pasar al plan "Pay-as-you-go" y evitar límites de frecuencia.</li>
-                              </ol>
-                              <a href="https://aistudio.google.com/app/apikey" target="_blank" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg"><Icons.ExternalLink size={16}/> Ir a Google AI Studio</a>
-                          </div>
                       </div>
                   </div>
 
-                  {/* --- GESTIÓN DE DATOS (NUEVO) --- */}
+                  {/* --- GESTIÓN DE DATOS (IMPORT/EXPORT) --- */}
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-cyan-500/20 rounded-xl text-cyan-400"><Icons.Save size={32} /></div>
-                          <div><h2 className="text-2xl font-bold text-white">Gestión de Datos</h2><p className="text-slate-400 text-sm">Copia de seguridad completa (Materias + PDFs + Historial)</p></div>
+                          <div><h2 className="text-2xl font-bold text-white">Copia de Seguridad</h2><p className="text-slate-400 text-sm">Exporta tu configuración e historial</p></div>
                       </div>
                       
-                      <div className="space-y-4">
-                          <p className="text-sm text-slate-300">
-                             Guarda un archivo <code>.json</code> con toda tu configuración, PDFs y progreso. Útil para cambiar de navegador o dispositivo.
+                      <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-xl p-4 mb-6">
+                          <h4 className="text-yellow-500 font-bold text-sm mb-2 flex items-center gap-2"><Icons.AlertTriangle size={16}/> Información Importante</h4>
+                          <p className="text-sm text-slate-300 leading-relaxed">
+                              El archivo de exportación contiene <strong>toda tu configuración, claves, materias e historial de resultados</strong>, pero para mantener el archivo ligero, <strong className="text-white">NO incluye el contenido de los documentos PDF</strong>.
                           </p>
-                          
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <button 
-                                  onClick={handleRunExport} 
-                                  disabled={ioStatus === 'processing'}
-                                  className={`flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-slate-800 border-slate-600 hover:bg-slate-700 text-white'}`}
-                              >
-                                  {ioStatus === 'processing' ? <Icons.Loader size={20}/> : <Icons.Upload size={20} className="rotate-180" />} 
-                                  {ioStatus === 'processing' ? 'Procesando...' : 'EXPORTAR COPIA'}
-                              </button>
+                          <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+                              Al restaurar una copia, deberás entrar en la configuración de cada materia, borrar los documentos que aparezcan y <strong>volver a subirlos manualmente</strong>.
+                          </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <button 
+                              onClick={handleRunExport} 
+                              disabled={ioStatus === 'processing'}
+                              className={`flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-slate-800 border-slate-600 hover:bg-slate-700 text-white'}`}
+                          >
+                              {ioStatus === 'processing' ? <Icons.Loader size={20}/> : <Icons.Upload size={20} className="rotate-180" />} 
+                              {ioStatus === 'processing' ? 'Procesando...' : 'EXPORTAR CONFIG'}
+                          </button>
 
-                              <label className={`cursor-pointer flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'processing' ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'bg-blue-600 border-blue-500 hover:bg-blue-500 text-white'}`}>
-                                  <input type="file" accept=".json" className="hidden" onChange={handleRunImport} disabled={ioStatus === 'processing'} />
-                                  <Icons.Upload size={20} /> RESTAURAR COPIA
-                              </label>
-                          </div>
+                          <label className={`cursor-pointer flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'processing' ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'bg-blue-600 border-blue-500 hover:bg-blue-500 text-white'}`}>
+                              <input type="file" accept=".json" className="hidden" onChange={handleRunImport} disabled={ioStatus === 'processing'} />
+                              <Icons.Upload size={20} /> RESTAURAR
+                          </label>
                       </div>
                   </div>
 
@@ -506,6 +451,8 @@
               </div>
           );
       };
+
+
         
         
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {

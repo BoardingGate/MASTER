@@ -853,7 +853,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
       };
 
 
-        
       const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
@@ -874,23 +873,41 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           useEffect(() => { if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) { if (questions.length - currentIndex < 5) loadNextBatch(); } }, [currentIndex, status, questions.length, batchQueue.length]);
 
-          // Inicializar pesos: Recuperar última sesión de refuerzo o usar materia
+          // Inicializar pesos: Prioridad a la Propuesta IA > Última sesión manual > Default
           useEffect(() => {
               if (showWeightModal && activeSubject) {
-                  // 1. Construir lista base desde Materia
+                  // 1. Construir estructura base
                   const baseItems = [];
                   if (activeSubject.files) activeSubject.files.forEach(f => baseItems.push({ type: 'pdf', id: f.id, name: f.name, pct: 0, originalPct: f.pct }));
                   if (activeSubject.includeLastCall) baseItems.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: 0, originalPct: activeSubject.lastCallPct });
                   activeSubject.topics.forEach(t => baseItems.push({ type: 'specific_topic', id: t.name, name: t.name, pct: 0, originalPct: t.pct }));
 
-                  // 2. Intentar recuperar "Ultima Sesión Manual" de LS (para no perder lo que el usuario editó a mano)
-                  const lastManualSession = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
-                  if (lastManualSession) {
-                      const lastWeights = JSON.parse(lastManualSession);
-                      // Mapear pesos guardados a la lista base
+                  // 2. Buscar datos guardados
+                  const aiProposalRaw = window.localStorage.getItem('bg_reinforcement_proposal');
+                  const manualRaw = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
+                  
+                  let sourceWeights = null;
+                  let isAiSource = false;
+
+                  // Lógica de Prioridad: Si hay propuesta IA para ESTA materia, la usamos. Si no, miramos manual.
+                  if (aiProposalRaw) {
+                      const aiData = JSON.parse(aiProposalRaw);
+                      if (aiData.subjectId === activeSubject.id) {
+                          sourceWeights = aiData.weights;
+                          isAiSource = true;
+                      }
+                  }
+
+                  if (!sourceWeights && manualRaw) {
+                      sourceWeights = JSON.parse(manualRaw);
+                  }
+
+                  // 3. Aplicar pesos
+                  if (sourceWeights) {
                       const mergedItems = baseItems.map(item => {
-                          const saved = lastWeights.find(w => w.name === item.name && w.type === item.type);
-                          return saved ? { ...item, pct: saved.pct } : item;
+                          // La IA guarda {name, pct}, Manual guarda el objeto completo. Buscamos por nombre.
+                          const match = sourceWeights.find(w => w.name === item.name);
+                          return match ? { ...item, pct: match.pct } : item;
                       });
                       setCustomWeights(mergedItems);
                   } else {
@@ -911,8 +928,8 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                           }
                           return { ...item, pct: 0 };
                       }));
-                      alert("✅ Propuesta de la IA cargada.");
-                  } else { alert("No hay propuesta válida para esta materia."); }
+                      alert("✅ Propuesta de la IA cargada y aplicada.");
+                  } else { alert("No hay propuesta válida guardada para esta materia."); }
               } else { alert("No se encontró ninguna propuesta guardada."); }
           };
 
@@ -926,9 +943,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               ];
 
               if (isReinforcement) {
-                  // Guardar configuración manual para el futuro
                   window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
-
                   sourceData.filter(i => i.type === 'pdf' || i.type === 'last_call').forEach(item => {
                       const count = Math.round((item.pct / 100) * totalQs);
                       if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
@@ -1141,6 +1156,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               </div>
           );
       };
+     
         
 
     const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {

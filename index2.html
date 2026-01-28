@@ -463,8 +463,7 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
       };
   
       
-
-      const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
+const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
           const [processing, setProcessing] = useState(false);
@@ -495,13 +494,16 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           };
           const handleDelete = async (id, sub) => { if (confirm("¿Borrar materia?")) { if(sub.files) for(const f of sub.files) await deleteFromDB(f.id); await deleteFromDB(id); setSubjects(prev => prev.filter(s => s.id !== id)); if (activeSubjectId === id) setActiveSubjectId(null); } };
           const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
+          
           const handleFileUpload = async (e) => {
               const file = e.target.files[0];
               if (!file) return;
               setProcessing(true); setProgress(0);
               const fileId = `${editForm.id}_${Date.now()}`;
+              let extractionFailed = false;
+              let extractedText = "";
+
               try {
-                  let extractedText = "";
                   if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
                       extractedText = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (event) => resolve(event.target.result); reader.onerror = (error) => reject(error); reader.readAsText(file); });
                       setProgress(100);
@@ -517,13 +519,25 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                       }
                       URL.revokeObjectURL(url); loadingTask.destroy(); extractedText = textChunks.join('\n\n');
                   }
-                  if (!extractedText || extractedText.trim().length < 150) { alert("⚠️ ERROR DE IMPORTACIÓN:\n\nEl archivo no contiene texto extraíble. BoardingGate requiere PDFs originales con capa de texto.\n\nSi es un escaneo, conviértelo primero con OCR para que pueda leerse como un PDF original."); setProcessing(false); return; }
+
+                  // Lógica modificada: Si falla, no bloqueamos, marcamos como fallido
+                  if (!extractedText || extractedText.trim().length < 150) { 
+                      extractionFailed = true;
+                      extractedText = "[TEXTO NO EXTRAÍDO - PDF ESCANEADO O PROTEGIDO]";
+                  }
+
                   await saveToDB(fileId, { text: extractedText, fileData: file }); 
+                  
+                  // Si falló, asignamos 0% peso. Si no, calculamos el restante.
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: Math.max(0, 100 - currentTotal - lastCallWeight) }] }));
-              } catch (err) { alert(`Error: ${err.message}`); } finally { setProcessing(false); }
+                  const newWeight = extractionFailed ? 0 : Math.max(0, 100 - currentTotal - lastCallWeight);
+
+                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: newWeight, extractionFailed: extractionFailed }] }));
+                  
+              } catch (err) { alert(`Error crítico: ${err.message}`); } finally { setProcessing(false); }
           };
+
           const handleViewFileText = async (fileId) => { try { const data = await getFromDB(fileId); setFileContent((data && data.text) ? data.text : "Sin contenido."); setViewingFile(true); } catch(e) { setFileContent("Error: " + e.message); setViewingFile(true); } };
           const handleOpenFileOriginal = async (fileId) => { try { const data = await getFromDB(fileId); if (data && data.fileData) window.open(URL.createObjectURL(data.fileData), '_blank'); } catch(e) { alert("Error: " + e.message); } };
           const handleSearchDescription = async () => {
@@ -561,7 +575,6 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
               const cutOffPointsEq = totalMaxPoints > 0 ? (totalMaxPoints * (editForm.cutOffPct / 100)).toFixed(1) : 0;
               const lastCallPctEq = (totalMaxPoints > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / totalMaxPoints) * 100).toFixed(1) : 0;
               const topicsTotalPct = parseFloat(editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0).toFixed(2));
-
               const isLinkPdf = editForm.lastCallLink && editForm.lastCallLink.toLowerCase().endsWith('.pdf');
 
               return (
@@ -625,8 +638,11 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                               <div className="space-y-2">
                                   {editForm.files.map((file, idx) => (
                                       <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
-                                          <div className="p-2 bg-red-900/20 text-red-400 rounded"><Icons.FileText size={16}/></div>
-                                          <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate text-white">{file.name}</div></div>
+                                          <div className={`p-2 rounded ${file.extractionFailed ? 'bg-red-900/30 text-red-500' : 'bg-blue-900/20 text-blue-400'}`}><Icons.FileText size={16}/></div>
+                                          <div className="flex-1 min-w-0">
+                                              <div className="text-sm font-bold truncate text-white">{file.name}</div>
+                                              {file.extractionFailed && <div className="text-[10px] text-red-400 font-bold flex items-center gap-1"><Icons.AlertTriangle size={10}/> TEXTO NO LEÍBLE - SOLO CONSULTA (0%)</div>}
+                                          </div>
                                           <div className="flex items-center gap-1"><button onClick={() => handleOpenFileOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir</button><button onClick={() => handleViewFileText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Texto</button></div>
                                           <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2"><input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" /><span className="text-xs font-bold text-slate-500 pr-1">%</span></div>
                                           <button onClick={() => { const newFiles = editForm.files.filter((_, i) => i !== idx); setEditForm({...editForm, files: newFiles}); deleteFromDB(file.id); }} className="p-2 text-slate-500 hover:text-red-400"><Icons.Trash2 size={16}/></button>
@@ -680,7 +696,165 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           );
       };
 
-  const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+  const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
+          const [analysis, setAnalysis] = useState(null);
+          const [loading, setLoading] = useState(false);
+          const [aiAdvice, setAiAdvice] = useState('');
+          const [showAll, setShowAll] = useState(false);
+          const [orphans, setOrphans] = useState([]);
+          const [showConsolidate, setShowConsolidate] = useState(false);
+          const [consolidationMap, setConsolidationMap] = useState({});
+          
+          const [showRebalance, setShowRebalance] = useState(false);
+          const [proposedWeights, setProposedWeights] = useState(null);
+          const [showProposalSavedModal, setShowProposalSavedModal] = useState(false); // Nuevo modal
+
+          useEffect(() => {
+              if(!results.length && !activeSubject) return;
+              
+              const activeTopicNames = activeSubject.topics.map(t => t.name);
+              const activeFileNames = (activeSubject.files || []).map(f => f.name);
+              const validItems = new Set([...activeTopicNames, ...activeFileNames]);
+              const aggregates = {};
+              const foundOrphans = new Set();
+
+              results.forEach(r => {
+                  if(r.isReinforcement) return; // IGNORAR SIMULACROS DE REFUERZO EN EL ANÁLISIS
+                  if(!r.details || !r.details.topics) return;
+                  Object.entries(r.details.topics).forEach(([topic, stats]) => {
+                      if(validItems.has(topic)) {
+                          if(!aggregates[topic]) aggregates[topic] = { h:0, t:0, exams: 0 };
+                          aggregates[topic].h += stats.h; aggregates[topic].t += stats.t; aggregates[topic].exams++;
+                      } else { foundOrphans.add(topic); }
+                  });
+              });
+
+              activeTopicNames.forEach(name => { if(!aggregates[name]) aggregates[name] = { h:0, t:0, exams:0 }; });
+
+              if (foundOrphans.size > 0) {
+                  const initialMap = {};
+                  foundOrphans.forEach(orphan => {
+                      const match = activeTopicNames.find(t => t.toLowerCase().includes(orphan.toLowerCase()) || orphan.toLowerCase().includes(t.toLowerCase()));
+                      initialMap[orphan] = { action: match ? 'merge' : 'add', target: match || '', weight: 0 };
+                  });
+                  setOrphans(Array.from(foundOrphans)); setConsolidationMap(initialMap);
+              } else { setOrphans([]); }
+
+              const ranking = Object.entries(aggregates).map(([name, data]) => ({ name, rate: data.t > 0 ? (data.h/data.t)*100 : 0, count: data.t })).sort((a,b) => a.rate - b.rate);
+              setAnalysis(ranking);
+          }, [results, activeSubject]);
+
+          const handleConsolidate = () => {
+              const merges = {}; const additions = [];
+              orphans.forEach(orphan => {
+                  const decision = consolidationMap[orphan];
+                  if (decision.action === 'merge' && decision.target) merges[orphan] = decision.target;
+                  else if (decision.action === 'add') additions.push({ name: orphan, pct: parseFloat(decision.weight) || 0 });
+              });
+              onConsolidateHistory(merges, additions); setOrphans([]); setShowConsolidate(false);
+          };
+          const updateConsolidation = (orphan, field, value) => { setConsolidationMap(prev => ({ ...prev, [orphan]: { ...prev[orphan], [field]: value } })); };
+
+          const askAI = async (prompt) => {
+              const apiKey = window.localStorage.getItem('gemini_api_key');
+              if(!apiKey) { alert("Falta API Key"); return null; }
+              setLoading(true);
+              try { const text = await askGemini(JSON.parse(apiKey), prompt); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
+          };
+
+          const getAdvice = async () => {
+              const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
+              const text = await askAI(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`);
+              if(text) setAiAdvice(text);
+          };
+
+          const handleGenerateProposal = async () => {
+              let prompt = "";
+              const currentTopicsJSON = JSON.stringify(activeSubject.topics.map(t => t.name));
+              const perfSummary = analysis.filter(i => activeSubject.topics.some(t => t.name === i.name)).map(i => `${i.name} (Ac: ${i.rate.toFixed(0)}%, N: ${i.count})`).join('; ');
+              
+              prompt = `Soy planificador de estudios. Temas disponibles: ${currentTopicsJSON}. 
+              Rendimiento alumno: [${perfSummary}]. 
+              OBJETIVO: Generar una distribución de pesos (%) para un EXAMEN DE REFUERZO ESPECÍFICO.
+              CRITERIO: Asigna mucho peso (incluso 100% si es necesario) a los temas con PEOR nota o menos preguntas. Pon 0% a los temas dominados.
+              Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
+
+              const res = await askAI(prompt);
+              if(res) { 
+                  const json = extractJSON(res); 
+                  if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } 
+                  else alert("Error formato IA"); 
+              }
+          };
+
+          const saveProposalToReinforcement = () => {
+              if(!proposedWeights) return;
+              window.localStorage.setItem('bg_reinforcement_proposal', JSON.stringify({
+                  subjectId: activeSubject.id,
+                  weights: proposedWeights,
+                  date: new Date().toISOString()
+              }));
+              setShowRebalance(false);
+              setShowProposalSavedModal(true); // Mostrar modal éxito
+          };
+
+          if(!analysis || analysis.length === 0) return null;
+          const visualRanking = [...analysis].reverse();
+
+          return (
+              <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-900/80 border-purple-500/30">
+                  {/* MODAL PROPUESTA GUARDADA */}
+                  <Modal 
+                      isOpen={showProposalSavedModal} 
+                      title="PROPUESTA GUARDADA" 
+                      message="Los pesos de refuerzo se han guardado. Ve a la pestaña 'Examen', marca la casilla 'Simulacro de Refuerzo' y pulsa el botón 'CARGAR PROPUESTA IA' en el modal de configuración." 
+                      type="success" 
+                      onClose={() => setShowProposalSavedModal(false)} 
+                  />
+
+                  {orphans.length > 0 && !showConsolidate && (<div className="mb-6 bg-yellow-900/20 border border-yellow-500/50 p-4 rounded-xl flex justify-between items-center animate-pulse-error"><div className="text-yellow-200 text-xs"><strong>⚠️ Datos Huérfanos Detectados:</strong> Hay {orphans.length} temas en el historial que no existen en la materia actual.</div><button onClick={() => setShowConsolidate(true)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">CONSOLIDAR DATOS</button></div>)}
+                  {showConsolidate && (<div className="mb-6 bg-slate-800 border-2 border-yellow-500/50 rounded-xl p-4 fade-in"><h4 className="text-sm font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Wand size={16}/> Asistente de Consolidación</h4><div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar mb-4">{orphans.map(orphan => (<div key={orphan} className="bg-slate-900/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-red-300 truncate" title={orphan}>{orphan}</span><select value={consolidationMap[orphan].action} onChange={(e) => updateConsolidation(orphan, 'action', e.target.value)} className="bg-slate-800 text-white text-[10px] p-1 rounded border border-slate-600"><option value="merge">Fusionar con existente</option><option value="add">Reactivar (Añadir)</option><option value="ignore">Ignorar (Ocultar)</option></select></div>{consolidationMap[orphan].action === 'merge' && (<select value={consolidationMap[orphan].target} onChange={(e) => updateConsolidation(orphan, 'target', e.target.value)} className="w-full bg-slate-800 text-white text-xs p-2 rounded border border-slate-600"><option value="">Selecciona tema destino...</option>{activeSubject.topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}</select>)}{consolidationMap[orphan].action === 'add' && (<div className="flex items-center gap-2"><span className="text-[10px] text-slate-400">Peso nuevo (%):</span><input type="number" value={consolidationMap[orphan].weight} onChange={(e) => updateConsolidation(orphan, 'weight', e.target.value)} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs" /></div>)}</div>))}</div><div className="flex gap-2"><button onClick={() => setShowConsolidate(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={handleConsolidate} className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded">APLICAR Y CORREGIR</button></div></div>)}
+                  
+                  <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                      <h4 className="text-lg font-display font-bold text-purple-400 flex items-center gap-2"><Icons.BrainCircuit size={24}/> Análisis Inteligente</h4>
+                      <div className="flex gap-2">
+                          <button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} CONSEJO</button>
+                          <button onClick={handleGenerateProposal} disabled={loading} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all border border-blue-400">{loading ? <Icons.Loader/> : <Icons.Settings size={16}/>} GENERAR REFUERZO</button>
+                      </div>
+                  </div>
+                  
+                  {aiAdvice && <div className="mb-6 p-4 bg-purple-900/20 border border-purple-500/50 rounded-xl relative animate-pulse-error"><button onClick={() => setAiAdvice('')} className="absolute top-2 right-2 text-purple-300 hover:text-white"><Icons.XCircle size={18}/></button><div className="text-sm text-purple-100 italic leading-relaxed whitespace-pre-wrap pr-6">{aiAdvice}</div></div>}
+
+                  {showRebalance && proposedWeights && (
+                      <div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in">
+                          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                              <h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2"><Icons.BrainCircuit size={16}/> Propuesta de Refuerzo (IA)</h5>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2"><div>Tema</div><div className="text-center">Actual</div><div className="text-center">Propuesto</div></div>
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">
+                              {activeSubject.topics.map((t, i) => { 
+                                  const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); 
+                                  const newPct = match ? match.pct : 0; 
+                                  const diff = newPct - t.pct; 
+                                  return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) 
+                              })}
+                          </div>
+                          <p className="text-[10px] text-blue-300 italic mb-4">* Esta propuesta NO modificará tus materias. Se guardará para usarla en un "Simulacro de Refuerzo".</p>
+                          <div className="flex gap-2">
+                              <button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
+                              <button onClick={saveProposalToReinforcement} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">GUARDAR PROPUESTA</button>
+                          </div>
+                      </div>
+                  )}
+
+                  {showAll ? <div className="space-y-3"><div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visualRanking.map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div></div>))}</div></div> : <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div><div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div></div>{visualRanking.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}</div>}
+              </div>
+          );
+      };
+
+
+        
+      const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
@@ -700,14 +874,28 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
 
           useEffect(() => { if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) { if (questions.length - currentIndex < 5) loadNextBatch(); } }, [currentIndex, status, questions.length, batchQueue.length]);
 
-          // Inicializar pesos personalizados
+          // Inicializar pesos: Recuperar última sesión de refuerzo o usar materia
           useEffect(() => {
               if (showWeightModal && activeSubject) {
-                  const items = [];
-                  if (activeSubject.files) activeSubject.files.forEach(f => items.push({ type: 'pdf', id: f.id, name: f.name, pct: f.pct }));
-                  if (activeSubject.includeLastCall) items.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct });
-                  activeSubject.topics.forEach(t => items.push({ type: 'specific_topic', id: t.name, name: t.name, pct: t.pct }));
-                  setCustomWeights(items);
+                  // 1. Construir lista base desde Materia
+                  const baseItems = [];
+                  if (activeSubject.files) activeSubject.files.forEach(f => baseItems.push({ type: 'pdf', id: f.id, name: f.name, pct: 0, originalPct: f.pct }));
+                  if (activeSubject.includeLastCall) baseItems.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: 0, originalPct: activeSubject.lastCallPct });
+                  activeSubject.topics.forEach(t => baseItems.push({ type: 'specific_topic', id: t.name, name: t.name, pct: 0, originalPct: t.pct }));
+
+                  // 2. Intentar recuperar "Ultima Sesión Manual" de LS (para no perder lo que el usuario editó a mano)
+                  const lastManualSession = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
+                  if (lastManualSession) {
+                      const lastWeights = JSON.parse(lastManualSession);
+                      // Mapear pesos guardados a la lista base
+                      const mergedItems = baseItems.map(item => {
+                          const saved = lastWeights.find(w => w.name === item.name && w.type === item.type);
+                          return saved ? { ...item, pct: saved.pct } : item;
+                      });
+                      setCustomWeights(mergedItems);
+                  } else {
+                      setCustomWeights(baseItems);
+                  }
               }
           }, [showWeightModal, activeSubject]);
 
@@ -731,41 +919,27 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
               let plan = [];
-              
-              // Si es refuerzo usamos los pesos del modal (customWeights), si no, los de la materia
               const sourceData = isReinforcement ? customWeights : [
                   ...(activeSubject.files || []).map(f => ({ type: 'pdf', id: f.id, name: f.name, pct: f.pct })),
                   ...(activeSubject.includeLastCall ? [{ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct }] : []),
-                  // En modo normal, los topics se tratan como un bloque "internet" con el peso restante
                   { type: 'internet_normal_block', pct: Math.max(0, 100 - ((activeSubject.files||[]).reduce((s,f)=>s+f.pct,0) + (activeSubject.includeLastCall?activeSubject.lastCallPct:0))) }
               ];
 
               if (isReinforcement) {
-                  // --- LÓGICA REFUERZO (AGRUPADA) ---
-                  // 1. PDFs y Convocatorias van por separado
+                  // Guardar configuración manual para el futuro
+                  window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
+
                   sourceData.filter(i => i.type === 'pdf' || i.type === 'last_call').forEach(item => {
                       const count = Math.round((item.pct / 100) * totalQs);
                       if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
                   });
-
-                  // 2. Agrupar todos los 'specific_topic' en una sola llamada 'internet' pero pasando los pesos personalizados
                   const topicItems = sourceData.filter(i => i.type === 'specific_topic');
                   const totalTopicPct = topicItems.reduce((s, i) => s + i.pct, 0);
                   const topicCount = Math.round((totalTopicPct / 100) * totalQs);
-                  
                   if (topicCount > 0) {
-                      // Pasamos la lista de temas con sus pesos nuevos a la cola
-                      plan.push({ 
-                          type: 'internet', 
-                          id: 'web_custom', 
-                          name: 'Refuerzo Temas', 
-                          count: topicCount,
-                          customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct })) // Pesos rebalanceados
-                      });
+                      plan.push({ type: 'internet', id: 'web_custom', name: 'Refuerzo Temas', count: topicCount, customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct })) });
                   }
-
               } else {
-                  // --- LÓGICA NORMAL ---
                   sourceData.forEach(item => {
                       if(item.type === 'internet_normal_block') {
                           const count = Math.round((item.pct / 100) * totalQs);
@@ -777,17 +951,8 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                   });
               }
 
-              // Convertir plan en cola de lotes (batchQueue)
               let queue = [];
-              plan.forEach(source => { 
-                  let remain = source.count; 
-                  while(remain > 0) { 
-                      const amount = Math.min(remain, 5); 
-                      // Importante: pasar customTopics si existen
-                      queue.push({ ...source, amount: amount }); 
-                      remain -= amount; 
-                  } 
-              });
+              plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
               return queue;
           };
 
@@ -796,28 +961,13 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
               isFetchingRef.current = true;
               const nextBatch = batchQueue[0]; 
               try {
-                  let sourceConfig = { 
-                      type: nextBatch.type, 
-                      name: nextBatch.name, 
-                      content: '',
-                      customTopics: nextBatch.customTopics // Pasamos los temas personalizados si existen
-                  };
-
-                  if (nextBatch.type === 'pdf') { 
-                      const dbData = await getFromDB(nextBatch.id); 
-                      sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); 
-                  }
-                  
+                  let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '', customTopics: nextBatch.customTopics };
+                  if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
-                  
-                  if (uniqueNewQs.length > 0) { 
-                      updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); 
-                  } else { 
-                      updateState({ batchQueue: batchQueue.slice(1) }); 
-                  }
+                  if (uniqueNewQs.length > 0) { updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
+                  else { updateState({ batchQueue: batchQueue.slice(1) }); }
               } catch (e) { console.log(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
@@ -830,24 +980,15 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const startExam = async () => {
               if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite de simulacros. Registra la aplicación.");
               if (!isAuth) setTc(prev => prev + 1);
-              
               setShowWeightModal(false); 
               const queue = generateBatchPlan();
-              
               if(queue.length === 0) return alert("La configuración actual no genera ninguna pregunta (0%). Revisa los pesos.");
-
               updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
               isFetchingRef.current = true;
               try {
-                  // Cargar primer lote
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: '', customTopics: firstBatch.customTopics };
-                  
-                  if (firstBatch.type === 'pdf') { 
-                      const dbData = await getFromDB(firstBatch.id); 
-                      sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); 
-                  }
-                  
+                  if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
                   updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
               } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
@@ -944,16 +1085,29 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                                   </p>
                               </div>
                               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3">
+                                  {/* HEADER ROW */}
+                                  <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-500 uppercase px-3">
+                                      <div className="col-span-6">Concepto</div>
+                                      <div className="col-span-3 text-center">Original</div>
+                                      <div className="col-span-3 text-right">Refuerzo</div>
+                                  </div>
+                                  
                                   {customWeights.map((item, i) => (
-                                      <div key={i} className="flex items-center gap-3 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                                          <div className={`p-2 rounded ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>
-                                              {item.type==='pdf'?<Icons.FileText size={14}/>:item.type==='last_call'?<Icons.Clock size={14}/>:<Icons.Globe size={14}/>}
+                                      <div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                          <div className="col-span-6 flex items-center gap-2 min-w-0">
+                                              <div className={`p-1.5 rounded shrink-0 ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>
+                                                  {item.type==='pdf'?<Icons.FileText size={12}/>:item.type==='last_call'?<Icons.Clock size={12}/>:<Icons.Globe size={12}/>}
+                                              </div>
+                                              <div className="truncate text-xs font-bold text-white" title={item.name}>{item.name}</div>
                                           </div>
-                                          <div className="flex-1 min-w-0">
-                                              <div className="text-xs font-bold text-white truncate">{item.name}</div>
-                                              <div className="text-[10px] text-slate-500 uppercase">{item.type === 'specific_topic' ? 'Tema' : item.type}</div>
+                                          
+                                          {/* ORIGINAL PERCENTAGE */}
+                                          <div className="col-span-3 text-center">
+                                              <span className="text-xs text-slate-400 font-mono bg-slate-900/50 px-2 py-1 rounded">{item.originalPct}%</span>
                                           </div>
-                                          <div className="flex items-center gap-1">
+
+                                          {/* REINFORCEMENT PERCENTAGE (EDITABLE) */}
+                                          <div className="col-span-3 flex items-center justify-end gap-1">
                                               <input 
                                                   type="number" 
                                                   value={item.pct} 
@@ -961,7 +1115,7 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                                                       const val = parseFloat(e.target.value) || 0;
                                                       setCustomWeights(prev => prev.map((it, idx) => idx === i ? { ...it, pct: val } : it));
                                                   }}
-                                                  className="w-14 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none"
+                                                  className="w-12 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none"
                                               />
                                               <span className="text-xs text-slate-500">%</span>
                                           </div>
@@ -970,15 +1124,15 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                               </div>
                               <div className="p-6 border-t border-slate-800 bg-slate-900 rounded-b-2xl shrink-0 space-y-3">
                                   <div className="flex justify-between items-center text-xs font-bold mb-2">
-                                      <span className="text-slate-400">TOTAL:</span>
-                                      <span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400" : "text-red-400"}>
+                                      <span className="text-slate-400 uppercase tracking-widest">TOTAL PESO REFUERZO:</span>
+                                      <span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400 text-lg" : "text-red-400 text-lg"}>
                                           {customWeights.reduce((s, i) => s + i.pct, 0).toFixed(2)}%
                                       </span>
                                   </div>
                                   <button onClick={loadAIProposal} className="w-full py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Icons.BrainCircuit size={14}/> CARGAR PROPUESTA IA</button>
                                   <div className="flex gap-3">
                                       <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">CANCELAR</button>
-                                      <button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl">COMENZAR REFUERZO</button>
+                                      <button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg shadow-yellow-900/20">COMENZAR REFUERZO</button>
                                   </div>
                               </div>
                           </div>
@@ -987,157 +1141,6 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
               </div>
           );
       };
-
-   
-const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
-          const [analysis, setAnalysis] = useState(null);
-          const [loading, setLoading] = useState(false);
-          const [aiAdvice, setAiAdvice] = useState('');
-          const [showAll, setShowAll] = useState(false);
-          const [orphans, setOrphans] = useState([]);
-          const [showConsolidate, setShowConsolidate] = useState(false);
-          const [consolidationMap, setConsolidationMap] = useState({});
-          
-          // Estados Rebalanceo IA
-          const [showRebalance, setShowRebalance] = useState(false);
-          const [proposedWeights, setProposedWeights] = useState(null);
-
-          useEffect(() => {
-              if(!results.length && !activeSubject) return;
-              
-              const activeTopicNames = activeSubject.topics.map(t => t.name);
-              const activeFileNames = (activeSubject.files || []).map(f => f.name);
-              const validItems = new Set([...activeTopicNames, ...activeFileNames]);
-              const aggregates = {};
-              const foundOrphans = new Set();
-
-              results.forEach(r => {
-                  if(r.isReinforcement) return; // IGNORAR SIMULACROS DE REFUERZO EN EL ANÁLISIS
-                  if(!r.details || !r.details.topics) return;
-                  Object.entries(r.details.topics).forEach(([topic, stats]) => {
-                      if(validItems.has(topic)) {
-                          if(!aggregates[topic]) aggregates[topic] = { h:0, t:0, exams: 0 };
-                          aggregates[topic].h += stats.h; aggregates[topic].t += stats.t; aggregates[topic].exams++;
-                      } else { foundOrphans.add(topic); }
-                  });
-              });
-
-              activeTopicNames.forEach(name => { if(!aggregates[name]) aggregates[name] = { h:0, t:0, exams:0 }; });
-
-              if (foundOrphans.size > 0) {
-                  const initialMap = {};
-                  foundOrphans.forEach(orphan => {
-                      const match = activeTopicNames.find(t => t.toLowerCase().includes(orphan.toLowerCase()) || orphan.toLowerCase().includes(t.toLowerCase()));
-                      initialMap[orphan] = { action: match ? 'merge' : 'add', target: match || '', weight: 0 };
-                  });
-                  setOrphans(Array.from(foundOrphans)); setConsolidationMap(initialMap);
-              } else { setOrphans([]); }
-
-              const ranking = Object.entries(aggregates).map(([name, data]) => ({ name, rate: data.t > 0 ? (data.h/data.t)*100 : 0, count: data.t })).sort((a,b) => a.rate - b.rate);
-              setAnalysis(ranking);
-          }, [results, activeSubject]);
-
-          // ... (Funciones de Consolidación handleConsolidate, updateConsolidation se mantienen igual) ...
-          const handleConsolidate = () => {
-              const merges = {}; const additions = [];
-              orphans.forEach(orphan => {
-                  const decision = consolidationMap[orphan];
-                  if (decision.action === 'merge' && decision.target) merges[orphan] = decision.target;
-                  else if (decision.action === 'add') additions.push({ name: orphan, pct: parseFloat(decision.weight) || 0 });
-              });
-              onConsolidateHistory(merges, additions); setOrphans([]); setShowConsolidate(false);
-          };
-          const updateConsolidation = (orphan, field, value) => { setConsolidationMap(prev => ({ ...prev, [orphan]: { ...prev[orphan], [field]: value } })); };
-
-          const askAI = async (prompt) => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) { alert("Falta API Key"); return null; }
-              setLoading(true);
-              try { const text = await askGemini(JSON.parse(apiKey), prompt); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
-          };
-
-          const getAdvice = async () => {
-              const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
-              const text = await askAI(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`);
-              if(text) setAiAdvice(text);
-          };
-
-          const handleGenerateProposal = async () => {
-              let prompt = "";
-              const currentTopicsJSON = JSON.stringify(activeSubject.topics.map(t => t.name));
-              const perfSummary = analysis.filter(i => activeSubject.topics.some(t => t.name === i.name)).map(i => `${i.name} (Ac: ${i.rate.toFixed(0)}%, N: ${i.count})`).join('; ');
-              
-              prompt = `Soy planificador de estudios. Temas disponibles: ${currentTopicsJSON}. 
-              Rendimiento alumno: [${perfSummary}]. 
-              OBJETIVO: Generar una distribución de pesos (%) para un EXAMEN DE REFUERZO ESPECÍFICO.
-              CRITERIO: Asigna mucho peso (incluso 100% si es necesario) a los temas con PEOR nota o menos preguntas. Pon 0% a los temas dominados.
-              Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
-
-              const res = await askAI(prompt);
-              if(res) { 
-                  const json = extractJSON(res); 
-                  if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } 
-                  else alert("Error formato IA"); 
-              }
-          };
-
-          const saveProposalToReinforcement = () => {
-              if(!proposedWeights) return;
-              // Guardamos en LocalStorage para que lo lea la pestaña Examen
-              window.localStorage.setItem('bg_reinforcement_proposal', JSON.stringify({
-                  subjectId: activeSubject.id,
-                  weights: proposedWeights,
-                  date: new Date().toISOString()
-              }));
-              setShowRebalance(false);
-              alert("✅ Propuesta de Refuerzo guardada.\n\nVe a la pestaña 'Examen', marca la casilla 'Simulacro de Refuerzo' y pulsa el botón 'CARGAR PROPUESTA IA' que aparecerá en el modal.");
-          };
-
-          if(!analysis || analysis.length === 0) return null;
-          const visualRanking = [...analysis].reverse();
-
-          return (
-              <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-900/80 border-purple-500/30">
-                  {orphans.length > 0 && !showConsolidate && (<div className="mb-6 bg-yellow-900/20 border border-yellow-500/50 p-4 rounded-xl flex justify-between items-center animate-pulse-error"><div className="text-yellow-200 text-xs"><strong>⚠️ Datos Huérfanos Detectados:</strong> Hay {orphans.length} temas en el historial que no existen en la materia actual.</div><button onClick={() => setShowConsolidate(true)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">CONSOLIDAR DATOS</button></div>)}
-                  {showConsolidate && (<div className="mb-6 bg-slate-800 border-2 border-yellow-500/50 rounded-xl p-4 fade-in"><h4 className="text-sm font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Wand size={16}/> Asistente de Consolidación</h4><div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar mb-4">{orphans.map(orphan => (<div key={orphan} className="bg-slate-900/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-red-300 truncate" title={orphan}>{orphan}</span><select value={consolidationMap[orphan].action} onChange={(e) => updateConsolidation(orphan, 'action', e.target.value)} className="bg-slate-800 text-white text-[10px] p-1 rounded border border-slate-600"><option value="merge">Fusionar con existente</option><option value="add">Reactivar (Añadir)</option><option value="ignore">Ignorar (Ocultar)</option></select></div>{consolidationMap[orphan].action === 'merge' && (<select value={consolidationMap[orphan].target} onChange={(e) => updateConsolidation(orphan, 'target', e.target.value)} className="w-full bg-slate-800 text-white text-xs p-2 rounded border border-slate-600"><option value="">Selecciona tema destino...</option>{activeSubject.topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}</select>)}{consolidationMap[orphan].action === 'add' && (<div className="flex items-center gap-2"><span className="text-[10px] text-slate-400">Peso nuevo (%):</span><input type="number" value={consolidationMap[orphan].weight} onChange={(e) => updateConsolidation(orphan, 'weight', e.target.value)} className="w-16 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs" /></div>)}</div>))}</div><div className="flex gap-2"><button onClick={() => setShowConsolidate(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button><button onClick={handleConsolidate} className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded">APLICAR Y CORREGIR</button></div></div>)}
-                  
-                  <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                      <h4 className="text-lg font-display font-bold text-purple-400 flex items-center gap-2"><Icons.BrainCircuit size={24}/> Análisis Inteligente</h4>
-                      <div className="flex gap-2">
-                          <button onClick={getAdvice} disabled={loading} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all">{loading ? <Icons.Loader/> : <Icons.Wand size={16}/>} CONSEJO</button>
-                          <button onClick={handleGenerateProposal} disabled={loading} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all border border-blue-400">{loading ? <Icons.Loader/> : <Icons.Settings size={16}/>} GENERAR REFUERZO</button>
-                      </div>
-                  </div>
-                  
-                  {aiAdvice && <div className="mb-6 p-4 bg-purple-900/20 border border-purple-500/50 rounded-xl relative animate-pulse-error"><button onClick={() => setAiAdvice('')} className="absolute top-2 right-2 text-purple-300 hover:text-white"><Icons.XCircle size={18}/></button><div className="text-sm text-purple-100 italic leading-relaxed whitespace-pre-wrap pr-6">{aiAdvice}</div></div>}
-
-                  {showRebalance && proposedWeights && (
-                      <div className="mb-6 bg-slate-800 border-2 border-blue-500/50 rounded-xl p-4 fade-in">
-                          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                              <h5 className="text-sm font-bold text-blue-300 uppercase flex items-center gap-2"><Icons.BrainCircuit size={16}/> Propuesta de Refuerzo (IA)</h5>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-500 uppercase mb-2 px-2"><div>Tema</div><div className="text-center">Actual</div><div className="text-center">Propuesto</div></div>
-                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1 mb-4">
-                              {activeSubject.topics.map((t, i) => { 
-                                  const match = proposedWeights.find(p => p.name === t.name || p.name.includes(t.name)); 
-                                  const newPct = match ? match.pct : 0; 
-                                  const diff = newPct - t.pct; 
-                                  return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) 
-                              })}
-                          </div>
-                          <p className="text-[10px] text-blue-300 italic mb-4">* Esta propuesta NO modificará tus materias. Se guardará para usarla en un "Simulacro de Refuerzo".</p>
-                          <div className="flex gap-2">
-                              <button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
-                              <button onClick={saveProposalToReinforcement} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">GUARDAR PROPUESTA</button>
-                          </div>
-                      </div>
-                  )}
-
-                  {showAll ? <div className="space-y-3"><div className="flex justify-between items-center mb-2"><h5 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.Award size={14}/> Ranking Completo</h5><button onClick={() => setShowAll(false)} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">Ver menos <Icons.ChevronUp size={12}/></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visualRanking.map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className={item.rate>=50 ? 'text-green-400' : 'text-red-400'}>{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full transition-all" style={{width: `${item.rate}%`, backgroundColor: item.rate>=50 ? '#22c55e' : '#ef4444'}}></div></div></div>))}</div></div> : <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div><h5 className="text-xs font-bold text-green-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingUp size={14}/> Mejores Temas</h5><div className="space-y-3">{visualRanking.slice(0, 3).map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-green-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div><div><h5 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2"><Icons.TrendingDown size={14}/> Necesitan Refuerzo</h5><div className="space-y-3">{visualRanking.slice(-3).reverse().map((item, i) => (<div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700"><div className="flex justify-between text-xs mb-1"><span className="text-white font-bold truncate max-w-[70%]">{item.name}</span><span className="text-red-400">{item.rate.toFixed(1)}%</span></div><div className="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{width: `${item.rate}%`}}></div></div></div>))}</div></div></div>{visualRanking.length > 3 && <div className="text-center pt-2"><button onClick={() => setShowAll(true)} className="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-full transition-all flex items-center gap-2 mx-auto">Ver ranking completo <Icons.ChevronDown size={12}/></button></div>}</div>}
-              </div>
-          );
-      };
-
         
 
     const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {

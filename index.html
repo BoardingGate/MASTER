@@ -211,25 +211,30 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           let contextInstruction = "";
           
           if (sourceConfig.type === 'pdf') {
+              // PDF
               const safeContent = sourceConfig.content.substring(0, 2000000); 
               contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${safeContent} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
           } else if (sourceConfig.type === 'last_call') {
+              // Convocatoria
               contextInstruction = `INSTRUCCIÓN ESPECÍFICA: Usa Google Search para encontrar el documento PDF o la página oficial con el examen de la convocatoria de fecha ${subject.lastCallDate} de la oposición "${subject.name}". Extrae ${amount} preguntas reales. Prioriza enlaces directos a documentos PDF.`;
           } else {
-              // Internet / General (Mezcla de temas)
-              // AQUI ESTÁ EL CAMBIO: Usamos los temas personalizados si vienen en la config, sino los originales
-              const topicsToList = sourceConfig.customTopics || subject.topics;
+              // Internet / Temas (Refuerzo o Normal)
+              // Usamos los temas personalizados si existen (Refuerzo), si no, los de la materia (Normal)
+              const topicsToList = sourceConfig.customTopics || subject.topics || [];
               
-              // Filtramos temas con 0% peso para no ensuciar el prompt
-              const activeTopics = topicsToList.filter(t => t.pct > 0);
+              // Filtramos temas con peso > 0
+              const activeTopics = topicsToList.filter(t => (t.pct || 0) > 0);
               
-              if (activeTopics.length === 1) {
-                   // Si solo queda un tema (caso "Francotirador" o rebalanceo extremo)
-                   contextInstruction = `TEMA ESPECÍFICO: "${activeTopics[0].name}". INSTRUCCIÓN: Genera preguntas técnicas EXCLUSIVAMENTE sobre este tema.`;
+              if (activeTopics.length === 0) {
+                   // Fallback por si acaso
+                   contextInstruction = `Tema: "${subject.name}". Genera preguntas técnicas variadas de nivel alto.`;
+              } else if (activeTopics.length === 1) {
+                   // Solo un tema (Francotirador)
+                   contextInstruction = `TEMA ESPECÍFICO: "${activeTopics[0].name}". INSTRUCCIÓN: Genera preguntas técnicas y difíciles EXCLUSIVAMENTE sobre este tema.`;
               } else {
-                   // Caso Mezcla con pesos personalizados
-                   const topicsStr = activeTopics.map(t => `${t.name} (PESO: ${t.pct}%)`).join(', ');
-                   contextInstruction = `Temas a tratar y su distribución de importancia: ${topicsStr}. INSTRUCCIÓN: Genera preguntas variadas respetando estrictamente esa distribución de pesos.`;
+                   // Mezcla de temas
+                   const topicsStr = activeTopics.map(t => `${t.name} (IMPORTANCIA: ${t.pct}%)`).join(', ');
+                   contextInstruction = `Genera preguntas sobre estos temas respetando estrictamente esta distribución de importancia: ${topicsStr}. Usa Google Search para asegurar datos actualizados.`;
               }
           }
 
@@ -238,7 +243,7 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const rawText = await askGemini(apiKey, prompt);
           const parsed = extractJSON(rawText);
           
-          // Etiquetar origen
+          // Etiquetar origen para estadísticas
           let originLabel = "[Internet]";
           if (sourceConfig.type === 'pdf') originLabel = `[PDF: ${sourceConfig.name}]`;
           else if (sourceConfig.type === 'last_call') originLabel = `[Convocatoria ${subject.lastCallDate}]`;
@@ -873,41 +878,28 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           useEffect(() => { if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) { if (questions.length - currentIndex < 5) loadNextBatch(); } }, [currentIndex, status, questions.length, batchQueue.length]);
 
-          // Inicializar pesos: Prioridad a la Propuesta IA > Última sesión manual > Default
+          // Inicializar pesos
           useEffect(() => {
               if (showWeightModal && activeSubject) {
-                  // 1. Construir estructura base
                   const baseItems = [];
-                  if (activeSubject.files) activeSubject.files.forEach(f => baseItems.push({ type: 'pdf', id: f.id, name: f.name, pct: 0, originalPct: f.pct }));
-                  if (activeSubject.includeLastCall) baseItems.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: 0, originalPct: activeSubject.lastCallPct });
-                  activeSubject.topics.forEach(t => baseItems.push({ type: 'specific_topic', id: t.name, name: t.name, pct: 0, originalPct: t.pct }));
+                  if (activeSubject.files) activeSubject.files.forEach(f => baseItems.push({ type: 'pdf', id: f.id, name: f.name, pct: 0, originalPct: f.pct || 0 }));
+                  if (activeSubject.includeLastCall) baseItems.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: 0, originalPct: activeSubject.lastCallPct || 0 });
+                  activeSubject.topics.forEach(t => baseItems.push({ type: 'specific_topic', id: t.name, name: t.name, pct: 0, originalPct: t.pct || 0 }));
 
-                  // 2. Buscar datos guardados
                   const aiProposalRaw = window.localStorage.getItem('bg_reinforcement_proposal');
                   const manualRaw = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
-                  
                   let sourceWeights = null;
-                  let isAiSource = false;
 
-                  // Lógica de Prioridad: Si hay propuesta IA para ESTA materia, la usamos. Si no, miramos manual.
                   if (aiProposalRaw) {
                       const aiData = JSON.parse(aiProposalRaw);
-                      if (aiData.subjectId === activeSubject.id) {
-                          sourceWeights = aiData.weights;
-                          isAiSource = true;
-                      }
+                      if (aiData.subjectId === activeSubject.id) sourceWeights = aiData.weights;
                   }
+                  if (!sourceWeights && manualRaw) sourceWeights = JSON.parse(manualRaw);
 
-                  if (!sourceWeights && manualRaw) {
-                      sourceWeights = JSON.parse(manualRaw);
-                  }
-
-                  // 3. Aplicar pesos
                   if (sourceWeights) {
                       const mergedItems = baseItems.map(item => {
-                          // La IA guarda {name, pct}, Manual guarda el objeto completo. Buscamos por nombre.
                           const match = sourceWeights.find(w => w.name === item.name);
-                          return match ? { ...item, pct: match.pct } : item;
+                          return match ? { ...item, pct: parseFloat(match.pct) || 0 } : item;
                       });
                       setCustomWeights(mergedItems);
                   } else {
@@ -924,50 +916,75 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                       setCustomWeights(prev => prev.map(item => {
                           if (item.type === 'specific_topic') {
                               const match = data.weights.find(w => w.name === item.name);
-                              return match ? { ...item, pct: match.pct } : { ...item, pct: 0 };
+                              return match ? { ...item, pct: parseFloat(match.pct) || 0 } : { ...item, pct: 0 };
                           }
                           return { ...item, pct: 0 };
                       }));
                       alert("✅ Propuesta de la IA cargada y aplicada.");
-                  } else { alert("No hay propuesta válida guardada para esta materia."); }
+                  } else { alert("No hay propuesta válida para esta materia."); }
               } else { alert("No se encontró ninguna propuesta guardada."); }
           };
 
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
               let plan = [];
+              
+              // Cálculo seguro de los pesos restantes para el bloque normal
+              const usedPct = ((activeSubject.files||[]).reduce((s,f)=>s+(f.pct||0),0) + (activeSubject.includeLastCall ? (activeSubject.lastCallPct||0) : 0));
+              const internetPct = Math.max(0, 100 - usedPct);
+
               const sourceData = isReinforcement ? customWeights : [
-                  ...(activeSubject.files || []).map(f => ({ type: 'pdf', id: f.id, name: f.name, pct: f.pct })),
-                  ...(activeSubject.includeLastCall ? [{ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct }] : []),
-                  { type: 'internet_normal_block', pct: Math.max(0, 100 - ((activeSubject.files||[]).reduce((s,f)=>s+f.pct,0) + (activeSubject.includeLastCall?activeSubject.lastCallPct:0))) }
+                  ...(activeSubject.files || []).map(f => ({ type: 'pdf', id: f.id, name: f.name, pct: f.pct || 0 })),
+                  ...(activeSubject.includeLastCall ? [{ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct || 0 }] : []),
+                  { type: 'internet_normal_block', pct: internetPct }
               ];
 
               if (isReinforcement) {
                   window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
+                  
+                  // PDFs y Convocatorias
                   sourceData.filter(i => i.type === 'pdf' || i.type === 'last_call').forEach(item => {
-                      const count = Math.round((item.pct / 100) * totalQs);
+                      const count = Math.round(((item.pct || 0) / 100) * totalQs);
                       if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
                   });
+
+                  // Temas agrupados
                   const topicItems = sourceData.filter(i => i.type === 'specific_topic');
-                  const totalTopicPct = topicItems.reduce((s, i) => s + i.pct, 0);
+                  const totalTopicPct = topicItems.reduce((s, i) => s + (i.pct || 0), 0);
                   const topicCount = Math.round((totalTopicPct / 100) * totalQs);
+                  
                   if (topicCount > 0) {
-                      plan.push({ type: 'internet', id: 'web_custom', name: 'Refuerzo Temas', count: topicCount, customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct })) });
+                      plan.push({ 
+                          type: 'internet', 
+                          id: 'web_custom', 
+                          name: 'Refuerzo Temas', 
+                          count: topicCount, 
+                          customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct || 0 })) 
+                      });
                   }
               } else {
+                  // Modo Normal
                   sourceData.forEach(item => {
                       if(item.type === 'internet_normal_block') {
-                          const count = Math.round((item.pct / 100) * totalQs);
+                          const count = Math.round(((item.pct || 0) / 100) * totalQs);
                           if (count > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: count });
                       } else {
-                          const count = Math.round((item.pct / 100) * totalQs);
+                          const count = Math.round(((item.pct || 0) / 100) * totalQs);
                           if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
                       }
                   });
               }
 
+              // Aplanar a cola
               let queue = [];
-              plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
+              plan.forEach(source => { 
+                  let remain = source.count; 
+                  while(remain > 0) { 
+                      const amount = Math.min(remain, 5); 
+                      queue.push({ ...source, amount: amount }); 
+                      remain -= amount; 
+                  } 
+              });
               return queue;
           };
 
@@ -977,13 +994,22 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               const nextBatch = batchQueue[0]; 
               try {
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '', customTopics: nextBatch.customTopics };
-                  if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
+                  if (nextBatch.type === 'pdf') { 
+                      const dbData = await getFromDB(nextBatch.id); 
+                      sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); 
+                  }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
+                  
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
+                  
                   if (uniqueNewQs.length > 0) { updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
                   else { updateState({ batchQueue: batchQueue.slice(1) }); }
-              } catch (e) { console.log(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { 
+                  console.error(e); 
+                  // Si falla un lote, intentamos pasar al siguiente
+                  updateState({ batchQueue: batchQueue.slice(1) }); 
+              } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const handleStartClick = () => {
@@ -996,17 +1022,38 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite de simulacros. Registra la aplicación.");
               if (!isAuth) setTc(prev => prev + 1);
               setShowWeightModal(false); 
-              const queue = generateBatchPlan();
-              if(queue.length === 0) return alert("La configuración actual no genera ninguna pregunta (0%). Revisa los pesos.");
-              updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
-              isFetchingRef.current = true;
+              
               try {
+                  const queue = generateBatchPlan();
+                  if(queue.length === 0) return alert("La configuración actual no genera ninguna pregunta (0% de peso total). Revisa los pesos en 'Configuración Materia'.");
+
+                  updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
+                  isFetchingRef.current = true;
+
+                  // Cargar primer lote inmediatamente
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: '', customTopics: firstBatch.customTopics };
-                  if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
+                  
+                  if (firstBatch.type === 'pdf') { 
+                      const dbData = await getFromDB(firstBatch.id); 
+                      sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); 
+                  }
+                  
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
-              } catch (e) { updateState({ error: e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+                  updateState({ 
+                      questions: initialQs.map((q, i) => ({ ...q, id: i })), 
+                      batchQueue: queue.slice(1), 
+                      status: 'active', 
+                      timeLeft: activeSubject.timeMinutes * 60, 
+                      currentIndex: 0, 
+                      answers: {} 
+                  });
+              } catch (e) { 
+                  console.error(e);
+                  updateState({ error: "Error al iniciar: " + e.message, status: 'idle' }); 
+              } finally { 
+                  setTimeout(() => { isFetchingRef.current = false; }, 4000); 
+              }
           };
 
           const handleAnswer = (optionIdx) => {

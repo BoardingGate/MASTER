@@ -209,52 +209,57 @@
       };
 
 
-
-      const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
-          
+const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
+          
+          const userTopicNames = (subject.topics || []).map(t => t.name);
+          const topicsListStr = userTopicNames.join(", ");
+
           let contextInstruction = "";
           
           if (sourceConfig.type === 'pdf') {
-              const safeContent = sourceConfig.content.substring(0, 2000000); 
-              contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${safeContent} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
+              contextInstruction = `CONCUERDA CON EL TEXTO: ${sourceConfig.content.substring(0, 1000000)}. Usa como topic exactamente: "${sourceConfig.name}"`;
           } else if (sourceConfig.type === 'last_call') {
-              contextInstruction = `INSTRUCCIÓN ESPECÍFICA: Usa Google Search para encontrar el documento PDF o la página oficial con el examen de la convocatoria de fecha ${subject.lastCallDate} de la oposición "${subject.name}". Extrae ${amount} preguntas reales. Prioriza enlaces directos a documentos PDF.`;
+              contextInstruction = `Busca el examen de la convocatoria ${subject.lastCallDate} de "${subject.name}". Usa como topic: "[Examen Oficial]"`;
           } else {
-              const topicsToList = sourceConfig.customTopics || subject.topics || [];
-              const activeTopics = topicsToList.filter(t => (t.pct || 0) > 0);
+              const activeTopics = (sourceConfig.customTopics || subject.topics || []).filter(t => (t.pct || 0) > 0);
+              const topicsStr = activeTopics.map(t => `${t.name} (${t.pct}%)`).join(', ');
               
-              if (activeTopics.length === 0) {
-                   contextInstruction = `Tema: "${subject.name}". Genera preguntas técnicas variadas de nivel alto.`;
-              } else if (activeTopics.length === 1) {
-                   contextInstruction = `TEMA ESPECÍFICO: "${activeTopics[0].name}". INSTRUCCIÓN: Genera preguntas técnicas y difíciles EXCLUSIVAMENTE sobre este tema.`;
-              } else {
-                   const topicsStr = activeTopics.map(t => `${t.name} (IMPORTANCIA: ${t.pct}%)`).join(', ');
-                   contextInstruction = `Genera preguntas sobre estos temas respetando estrictamente esta distribución de importancia: ${topicsStr}. Usa Google Search para asegurar datos actualizados.`;
-              }
+              contextInstruction = `Temas a tratar: ${topicsStr}. 
+              IMPORTANTE: Para el campo "topic", elige OBLIGATORIAMENTE uno de estos nombres exactos de mi lista: [${topicsListStr}]`;
           }
 
-          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
+          const prompt = `Actúa como tribunal experto. Materia: "${subject.name}". ${contextInstruction} Genera ${amount} preguntas difíciles. Responde SOLO JSON: [{"question": "...", "options": ["A...", "B...", "C...", "D..."], "correct": 0, "explanation": "...", "topic": "NOMBRE_TEMA_EXACTO"}]`;
           
           try {
               const rawText = await askGemini(apiKey, prompt);
-              
               const parsed = extractJSON(rawText);
               
-              if (!Array.isArray(parsed) || parsed.length === 0) {
-              }
+              return parsed.map((q) => {
+                  let finalTopic = q.topic || "General";
+                  
+                  if (sourceConfig.type !== 'pdf' && sourceConfig.type !== 'last_call') {
+                      const match = userTopicNames.find(t => 
+                          t.toLowerCase() === finalTopic.toLowerCase() || 
+                          t.toLowerCase().includes(finalTopic.toLowerCase()) ||
+                          finalTopic.toLowerCase().includes(t.toLowerCase())
+                      );
+                      finalTopic = match || userTopicNames[0] || "General";
+                  }
 
-              let originLabel = "[Internet]";
-              if (sourceConfig.type === 'pdf') originLabel = `[PDF: ${sourceConfig.name}]`;
-              else if (sourceConfig.type === 'last_call') originLabel = `[Convocatoria ${subject.lastCallDate}]`;
-              else if (sourceConfig.customTopics) originLabel = `[Refuerzo IA]`;
-
-              return parsed.map(q => ({ ...q, origin: originLabel }));
-          } catch (err) {
-              throw err;
-          }
+                  return {
+                      question: q.question || "Pregunta sin texto",
+                      options: Array.isArray(q.options) ? q.options : ["A","B","C","D"],
+                      correct: parseInt(q.correct) || 0,
+                      explanation: q.explanation || "",
+                      topic: finalTopic,
+                      origin: sourceConfig.type === 'pdf' ? `[PDF: ${sourceConfig.name}]` : (sourceConfig.type === 'last_call' ? '[Oficial]' : '[Internet]')
+                  };
+              });
+          } catch (err) { throw err; }
       };
+
 
 
 
@@ -968,34 +973,62 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           const generateBatchPlan = () => {
               const totalQs = activeSubject.qCount;
               let plan = [];
-              const usedPct = ((activeSubject.files||[]).reduce((s,f)=>s+(f.pct||0),0) + (activeSubject.includeLastCall ? (activeSubject.lastCallPct||0) : 0));
-              const internetPct = Math.max(0, 100 - usedPct);
-
-              const sourceData = isReinforcement ? customWeights : [
-                  ...(activeSubject.files || []).map(f => ({ type: 'pdf', id: f.id, name: f.name, pct: f.pct || 0 })),
-                  ...(activeSubject.includeLastCall ? [{ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct || 0 }] : []),
-                  { type: 'internet_normal_block', pct: internetPct }
-              ];
-
+              
+              // 1. Decidir qué lista de temas y pesos usamos
+              let weightsToUse = [];
               if (isReinforcement) {
+                  // MODO REFUERZO: Usamos lo que el usuario ha puesto en el modal
+                  weightsToUse = customWeights;
+                  // Guardamos para recordar en la próxima sesión de refuerzo
                   window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
-                  sourceData.filter(i => (i.type === 'pdf' || i.type === 'last_call') && (i.pct > 0)).forEach(item => { 
-                      const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count }); 
-                  });
-                  const topicItems = sourceData.filter(i => i.type === 'specific_topic' && (i.pct > 0));
-                  const totalTopicPct = topicItems.reduce((s, i) => s + (i.pct || 0), 0);
-                  const topicCount = Math.round((totalTopicPct / 100) * totalQs);
-                  if (topicCount > 0) { plan.push({ type: 'internet', id: 'web_custom', name: 'Refuerzo Temas', count: topicCount, customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct || 0 })) }); }
               } else {
-                  sourceData.forEach(item => {
-                      if(item.type === 'internet_normal_block') { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: count }); } 
-                      else if ((item.pct || 0) > 0) { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count }); }
+                  // MODO NORMAL: Construimos la lista desde la materia
+                  const usedPdfAndCallPct = ((activeSubject.files||[]).reduce((s,f)=>s+(f.pct||0),0) + (activeSubject.includeLastCall ? (activeSubject.lastCallPct||0) : 0));
+                  const internetPct = Math.max(0, 100 - usedPdfAndCallPct);
+                  
+                  if (activeSubject.files) activeSubject.files.forEach(f => weightsToUse.push({ type: 'pdf', id: f.id, name: f.name, pct: f.pct }));
+                  if (activeSubject.includeLastCall) weightsToUse.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct });
+                  // El bloque de internet en modo normal usa los temas y pesos originales de la materia
+                  weightsToUse.push({ type: 'internet', id: 'web', name: 'Temario Internet', pct: internetPct, customTopics: activeSubject.topics });
+              }
+
+              // 2. Crear el plan de bloques
+              if (isReinforcement) {
+                  // En refuerzo, separamos PDFs/Conv de los Temas
+                  const pdfsAndCall = weightsToUse.filter(i => i.type === 'pdf' || i.type === 'last_call');
+                  const topics = weightsToUse.filter(i => i.type === 'specific_topic');
+                  
+                  pdfsAndCall.forEach(item => {
+                      const count = Math.round((item.pct / 100) * totalQs);
+                      if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
+                  });
+
+                  const totalTopicPct = topics.reduce((s, i) => s + i.pct, 0);
+                  const topicCount = Math.round((totalTopicPct / 100) * totalQs);
+                  if (topicCount > 0) {
+                      plan.push({ type: 'internet', id: 'web_reinf', name: 'Refuerzo Temas', count: topicCount, customTopics: topics });
+                  }
+              } else {
+                  // En modo normal, respetamos el plan estándar
+                  weightsToUse.forEach(item => {
+                      const count = Math.round((item.pct / 100) * totalQs);
+                      if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count, customTopics: item.customTopics });
                   });
               }
+
+              // 3. Crear cola final
               let queue = [];
-              plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
+              plan.forEach(source => { 
+                  let remain = source.count; 
+                  while(remain > 0) { 
+                      const amount = Math.min(remain, 5); 
+                      queue.push({ ...source, amount: amount }); 
+                      remain -= amount; 
+                  } 
+              });
               return queue;
           };
+         
 
           const loadNextBatch = async () => {
               if (isFetchingRef.current || batchQueue.length === 0) return;

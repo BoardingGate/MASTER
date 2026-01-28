@@ -211,21 +211,17 @@
 
 
       const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
-          console.log("🔵 FetchBatch INICIADO. Config:", sourceConfig);
           
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           let contextInstruction = "";
           
           if (sourceConfig.type === 'pdf') {
-              console.log("📄 Origen: PDF. Longitud texto:", sourceConfig.content ? sourceConfig.content.length : 0);
               const safeContent = sourceConfig.content.substring(0, 2000000); 
               contextInstruction = `--- CONTEXTO OBLIGATORIO (FUENTE: ${sourceConfig.name}) --- ${safeContent} --- FIN CONTEXTO --- INSTRUCCIÓN: Genera las preguntas BASÁNDOTE EXCLUSIVAMENTE en el texto proporcionado arriba.`;
           } else if (sourceConfig.type === 'last_call') {
-              console.log("🏛️ Origen: Convocatoria");
               contextInstruction = `INSTRUCCIÓN ESPECÍFICA: Usa Google Search para encontrar el documento PDF o la página oficial con el examen de la convocatoria de fecha ${subject.lastCallDate} de la oposición "${subject.name}". Extrae ${amount} preguntas reales. Prioriza enlaces directos a documentos PDF.`;
           } else {
-              console.log("🌐 Origen: Internet/Temas. CustomTopics:", sourceConfig.customTopics);
               const topicsToList = sourceConfig.customTopics || subject.topics || [];
               const activeTopics = topicsToList.filter(t => (t.pct || 0) > 0);
               
@@ -242,16 +238,11 @@
           const prompt = `Actúa como tribunal experto. Materia: "${subject.name}" (${subject.type}). ${contextInstruction} Genera EXACTAMENTE ${amount} preguntas tipo test (dificultad alta). IMPORTANTE: Cada pregunta debe tener EXACTAMENTE ${optCount} opciones (${letters.join(',')}). Añade el campo "topic" indicando el subtema específico. Responde ÚNICAMENTE con JSON válido: [{"question": "...", "options": [${letters.map(l => `"${l}..."`).join(', ')}], "correct": 0, "explanation": "...", "topic": "Título del tema"}]`;
           
           try {
-              console.log("🚀 Enviando Prompt a Gemini...");
               const rawText = await askGemini(apiKey, prompt);
-              console.log("📥 Respuesta Raw Gemini:", rawText.substring(0, 100) + "...");
               
               const parsed = extractJSON(rawText);
-              console.log("✅ JSON Parseado:", parsed);
               
               if (!Array.isArray(parsed) || parsed.length === 0) {
-                  console.error("❌ Error: JSON vacío o inválido devuelto por la IA.");
-                  throw new Error("La IA devolvió una respuesta vacía o inválida.");
               }
 
               let originLabel = "[Internet]";
@@ -261,7 +252,6 @@
 
               return parsed.map(q => ({ ...q, origin: originLabel }));
           } catch (err) {
-              console.error("❌ Error en fetchBatch:", err);
               throw err;
           }
       };
@@ -366,13 +356,11 @@
                               </div>
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                               
-                              {/* HELP BLOCK API KEY */}
                               <div className="mt-6 p-6 bg-[#1e293b] border border-[#334155] rounded-xl relative overflow-hidden">
                                   <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
                                       <Icons.HelpCircle size={20} /> Gestión de la API Key (Gratis vs Pago)
                                   </h4>
 
-                                  {/* OPCIÓN GRATUITA */}
                                   <div className="mb-6 border-b border-slate-700 pb-6">
                                       <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                                           <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded text-[10px] uppercase border border-green-500/30">Opción Gratuita</span>
@@ -388,7 +376,6 @@
                                       </p>
                                   </div>
 
-                                  {/* OPCIÓN DE PAGO */}
                                   <div>
                                       <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                                           <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-[10px] uppercase border border-blue-500/30">Opción Ilimitada (Pay-as-you-go)</span>
@@ -540,7 +527,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                       URL.revokeObjectURL(url); loadingTask.destroy(); extractedText = textChunks.join('\n\n');
                   }
 
-                  // Lógica modificada: Si falla, no bloqueamos, marcamos como fallido
                   if (!extractedText || extractedText.trim().length < 150) { 
                       extractionFailed = true;
                       extractedText = "[TEXTO NO EXTRAÍDO - PDF ESCANEADO O PROTEGIDO]";
@@ -548,7 +534,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
                   await saveToDB(fileId, { text: extractedText, fileData: file }); 
                   
-                  // Si falló, asignamos 0% peso. Si no, calculamos el restante.
                   const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
                   const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
                   const newWeight = extractionFailed ? 0 : Math.max(0, 100 - currentTotal - lastCallWeight);
@@ -872,9 +857,10 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           );
       };
 
+        
 
-  
-    const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+      
+   const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
@@ -882,11 +868,15 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           const [showWeightModal, setShowWeightModal] = useState(false);
           const [customWeights, setCustomWeights] = useState([]);
           
+          // Estados para "Ampliar Conocimiento"
+          const [showDeepDive, setShowDeepDive] = useState(false);
+          const [deepDiveContent, setDeepDiveContent] = useState('');
+          const [loadingDeepDive, setLoadingDeepDive] = useState(false);
+
           const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
-          // Timmers y Efectos
           useEffect(() => {
               let timer;
               if (status === 'active' && timeLeft > 0) { timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000); } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
@@ -915,7 +905,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               }
           }, [showWeightModal, activeSubject]);
 
-          // Lógica de Negocio
           const loadAIProposal = () => {
               const saved = window.localStorage.getItem('bg_reinforcement_proposal');
               if (saved) {
@@ -928,6 +917,29 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                       alert("✅ Propuesta de la IA cargada y aplicada.");
                   } else { alert("No hay propuesta válida para esta materia."); }
               } else { alert("No se encontró ninguna propuesta guardada."); }
+          };
+
+          const handleDeepDive = async () => {
+              const currentQ = questions[currentIndex];
+              if(!currentQ) return;
+              setLoadingDeepDive(true); setShowDeepDive(true); setDeepDiveContent('');
+              try {
+                  const prompt = `Actúa como un preparador de oposiciones de alto nivel. Analiza: "${currentQ.question}". Opción correcta: "${currentQ.options[currentQ.correct]}".
+                  
+                  Genera una respuesta con ESTRICTO CUMPLIMIENTO de estas reglas:
+                  1. NO saludes, NO hagas introducciones ni despedidas. Empieza DIRECTAMENTE con el contenido.
+                  2. NO uses entidades HTML, usa símbolos UNICODE directos (ej: →, •, ✅).
+                  3. ESTRUCTURA LA RESPUESTA EN DOS BLOQUES:
+                  
+                  BLOQUE 1: 📘 FUNDAMENTO TEÓRICO
+                  Explica el concepto con profundidad técnica.
+                  
+                  BLOQUE 2: 🧠 CLAVE DE MEMORIZACIÓN
+                  Ofrece IMPERATIVAMENTE un truco mnemotécnico o asociación mental.`;
+
+                  const text = await askGemini(apiKey, prompt);
+                  setDeepDiveContent(text);
+              } catch (e) { setDeepDiveContent("Error al obtener explicación."); } finally { setLoadingDeepDive(false); }
           };
 
           const generateBatchPlan = () => {
@@ -991,7 +1003,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                   const queue = generateBatchPlan();
                   if(queue.length === 0) return alert("La configuración actual no genera ninguna pregunta (0% de peso total). Revisa los pesos en 'Configuración Materia'.");
 
-                  // IMPORTANT: Set loading state BEFORE async work
                   updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Confeccionando examen...', error: null });
                   isFetchingRef.current = true;
 
@@ -1062,7 +1073,10 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           const stats = useMemo(() => status !== 'idle' ? calculateStats() : {}, [answers, questions]);
 
-          // --- PANTALLA DE SELECCIÓN (IDLE) ---
+          // --- 1. PANTALLA DE CARGA (PRIORIDAD MÁXIMA) ---
+          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center fade-in"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg || "Cargando..."}</h3></div>;
+
+          // --- 2. PANTALLA DE SELECCIÓN (IDLE) ---
           if (status === 'idle') return (
               <div className="h-full flex flex-col items-center justify-center p-6 text-center">
                   {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
@@ -1090,11 +1104,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               </div>
           );
 
-          // --- PANTALLA DE CARGA ---
-          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center fade-in"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
-
-          // --- PANTALLA ACTIVA ---
-          // Calculamos pacing
+          // --- 3. PANTALLA ACTIVA (EXAMEN) ---
           const totalExamSeconds = activeSubject.timeMinutes * 60;
           const avgTimePerQuestion = totalExamSeconds / activeSubject.qCount;
           const actualTimeSpent = totalExamSeconds - timeLeft;
@@ -1103,15 +1113,13 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           const paceM = Math.floor(paceAbs / 60).toString().padStart(2, '0');
           const paceS = Math.floor(paceAbs % 60).toString().padStart(2, '0');
           const paceString = `${paceSeconds >= 0 ? '+' : '-'}${paceM}:${paceS}`;
-          const answeredCount = Object.keys(answers).length;
-          const progressPct = ((answeredCount / activeSubject.qCount) * 100).toFixed(1);
+          const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
 
           const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
           const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
 
           return (
               <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
-                  {/* HEADER SIEMPRE VISIBLE */}
                   <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
                       <div className="flex justify-between items-center mb-2">
                           <div className="flex items-center gap-8">
@@ -1133,24 +1141,9 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                               <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
                           </div>
                       </div>
-                      <div className="grid grid-cols-6 gap-2 mb-2 items-center">
-                          <div className="col-span-4 grid grid-cols-5 gap-2">
-                              <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits} <span className="opacity-70">({hitPct}%)</span></div></div>
-                              <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
-                              <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
-                              <div className="bg-indigo-900/20 border border-indigo-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-indigo-400 uppercase font-bold">[Netas]</div><div className="text-xs font-bold text-indigo-300">{stats.hits - stats.misses}</div></div>
-                              <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{((stats.maxPoints * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
-                          </div>
-                          <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-[0_0_10px_rgba(234,179,8,0.1)]">
-                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none mb-1">{stats.points.toFixed(1)}</div>
-                              <div className="text-[9px] text-yellow-500/80 uppercase font-bold leading-none">Puntos</div>
-                              <div className="text-[10px] text-yellow-200/60 font-bold mt-1">Tasa: {((stats.hits / activeSubject.qCount) * 100).toFixed(1)}%</div>
-                          </div>
-                      </div>
-                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / stats.maxPoints) * 100}%`}}></div></div>
+                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / stats.maxPoints) * 100}%`}}></div></div>
                   </div>
 
-                  {/* AREA DE CONTENIDO CON FALLBACK DE CARGA */}
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
                       {questions[currentIndex] ? (
                           <div className="max-w-4xl mx-auto">
@@ -1172,11 +1165,15 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                   })}
                               </div>
                               {answers[currentIndex] !== undefined && answers[currentIndex] !== questions[currentIndex].correct && (
-                                  <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">{questions[currentIndex].explanation}</div>
+                                  <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">
+                                      <div className="mb-3">{questions[currentIndex].explanation}</div>
+                                      <button onClick={handleDeepDive} disabled={loadingDeepDive} className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all w-full sm:w-auto justify-center border border-red-400">
+                                          {loadingDeepDive ? <Icons.Loader size={14}/> : <Icons.BrainCircuit size={14}/>} AMPLIAR CONOCIMIENTO (IA)
+                                      </button>
+                                  </div>
                               )}
                           </div>
                       ) : (
-                          // FALLBACK INTERMEDIO (GENERANDO MÁS PREGUNTAS)
                           <div className="flex flex-col items-center justify-center h-full py-20 animate-pulse">
                               <Icons.Loader size={48} className="text-blue-500 mb-4"/>
                               <div className="text-xl font-bold text-white text-center">GENERANDO PREGUNTAS...</div>
@@ -1185,7 +1182,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                       )}
                   </div>
 
-                  {/* FOOTER SIEMPRE VISIBLE */}
                   <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
                        <div className="flex gap-2">
                            <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
@@ -1197,13 +1193,35 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                        </div>
                   </div>
 
-                  <Modal isOpen={showRestartConfirm} title="¿REINICIAR EXAMEN?" message="Se perderá todo el progreso actual y volverás al inicio. Esta acción no se puede deshacer." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={executeRestart} />
-                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR EXAMEN?" message="¿Estás seguro de que deseas finalizar? Se guardará el resultado actual en el historial." type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
+                  <Modal isOpen={showRestartConfirm} title="¿REINICIAR EXAMEN?" message="Se perderá todo el progreso actual y volverás al inicio." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={executeRestart} />
+                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR EXAMEN?" message="¿Estás seguro de que deseas finalizar?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
                   
+                  {/* MODAL AMPLIAR CONOCIMIENTO */}
+                  {showDeepDive && (
+                      <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in">
+                          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl relative">
+                              <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 rounded-t-2xl shrink-0">
+                                  <h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.BrainCircuit size={24} className="text-purple-500"/> Ampliación de Conocimiento</h3>
+                                  <button onClick={() => setShowDeepDive(false)} className="text-slate-400 hover:text-white p-2 rounded hover:bg-slate-800"><Icons.XCircle size={24}/></button>
+                              </div>
+                              <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-[#0f172a]">
+                                  {loadingDeepDive ? (
+                                      <div className="flex flex-col items-center justify-center h-full space-y-4">
+                                          <Icons.Loader size={48} className="text-purple-500 animate-spin"/>
+                                          <p className="text-purple-300 font-bold animate-pulse">Generando explicación detallada...</p>
+                                      </div>
+                                  ) : (
+                                      <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{deepDiveContent}</div>
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+                  )}
+
                   {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">{Array.from({length: activeSubject.qCount}).map((_, i) => { let bg = "bg-slate-800 text-slate-500 border-slate-700"; const ans = answers[i]; if (i < questions.length && ans !== undefined) { if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; else bg = "bg-red-900/60 text-red-400 border-red-500"; } else if (i >= questions.length) { bg = "opacity-30 border-dashed border-slate-800"; } return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button> })}</div></div></div>}
               </div>
           );
-      }; 
+      };
  
         
 
@@ -1261,7 +1279,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               });
           }, [results, activeSubject, filterStart, filterEnd]);
 
-          // Filtros basados en configuración actual + historial
           const availableFilters = useMemo(() => {
               if (!activeSubject) return { sources: [], topics: [] };
               const sources = new Set(); const topics = new Set();
@@ -1285,15 +1302,11 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                return filteredResults.filter(r => r.details && (r.details.sources?.[viewMode] || r.details.topics?.[viewMode]));
           }, [filteredResults, viewMode]);
 
-          // STATS CORREGIDOS: Excluir refuerzo de contadores globales
           const stats = useMemo(() => {
-              // Filtrar refuerzos para cálculos globales
               const statsResults = viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
               
               if (statsResults.length === 0) {
                   if (viewMode !== 'global' && viewResults.length > 0) {
-                      // Caso especial: filtro tema con registros de refuerzo pero sin registros normales
-                      // Queremos mostrar algo en la tabla, pero stats en 0
                       return { total: 0, avgVal: 0, totalAnswered: 0, totalSkipped: 0, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
                   }
                   return null;
@@ -1319,7 +1332,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               }
           }, [viewResults, viewMode]);
 
-          // GRÁFICA CORREGIDA: Excluir refuerzo de gráficas globales
           const graphResults = useMemo(() => {
               return viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
           }, [viewResults, viewMode]);

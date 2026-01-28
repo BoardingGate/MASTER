@@ -874,7 +874,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
 
   
-      const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+    const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
@@ -886,6 +886,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           const [apiKey] = usePersistentState('gemini_api_key', '');
           const isFetchingRef = useRef(false);
 
+          // Timmers y Efectos
           useEffect(() => {
               let timer;
               if (status === 'active' && timeLeft > 0) { timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000); } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
@@ -904,33 +905,24 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                   const aiProposalRaw = window.localStorage.getItem('bg_reinforcement_proposal');
                   const manualRaw = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
                   let sourceWeights = null;
-
-                  if (aiProposalRaw) {
-                      const aiData = JSON.parse(aiProposalRaw);
-                      if (aiData.subjectId === activeSubject.id) sourceWeights = aiData.weights;
-                  }
+                  if (aiProposalRaw) { const aiData = JSON.parse(aiProposalRaw); if (aiData.subjectId === activeSubject.id) sourceWeights = aiData.weights; }
                   if (!sourceWeights && manualRaw) sourceWeights = JSON.parse(manualRaw);
 
                   if (sourceWeights) {
-                      const mergedItems = baseItems.map(item => {
-                          const match = sourceWeights.find(w => w.name === item.name);
-                          return match ? { ...item, pct: parseFloat(match.pct) || 0 } : item;
-                      });
+                      const mergedItems = baseItems.map(item => { const match = sourceWeights.find(w => w.name === item.name); return match ? { ...item, pct: parseFloat(match.pct) || 0 } : item; });
                       setCustomWeights(mergedItems);
                   } else { setCustomWeights(baseItems); }
               }
           }, [showWeightModal, activeSubject]);
 
+          // Lógica de Negocio
           const loadAIProposal = () => {
               const saved = window.localStorage.getItem('bg_reinforcement_proposal');
               if (saved) {
                   const data = JSON.parse(saved);
                   if (data.subjectId === activeSubject.id && data.weights) {
                       setCustomWeights(prev => prev.map(item => {
-                          if (item.type === 'specific_topic') {
-                              const match = data.weights.find(w => w.name === item.name);
-                              return match ? { ...item, pct: parseFloat(match.pct) || 0 } : { ...item, pct: 0 };
-                          }
+                          if (item.type === 'specific_topic') { const match = data.weights.find(w => w.name === item.name); return match ? { ...item, pct: parseFloat(match.pct) || 0 } : { ...item, pct: 0 }; }
                           return { ...item, pct: 0 };
                       }));
                       alert("✅ Propuesta de la IA cargada y aplicada.");
@@ -939,10 +931,8 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           };
 
           const generateBatchPlan = () => {
-              console.log("📊 Generando Plan. esRefuerzo:", isReinforcement);
               const totalQs = activeSubject.qCount;
               let plan = [];
-              
               const usedPct = ((activeSubject.files||[]).reduce((s,f)=>s+(f.pct||0),0) + (activeSubject.includeLastCall ? (activeSubject.lastCallPct||0) : 0));
               const internetPct = Math.max(0, 100 - usedPct);
 
@@ -954,32 +944,20 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
               if (isReinforcement) {
                   window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
-                  sourceData.filter(i => i.type === 'pdf' || i.type === 'last_call').forEach(item => {
-                      const count = Math.round(((item.pct || 0) / 100) * totalQs);
-                      if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
-                  });
+                  sourceData.filter(i => i.type === 'pdf' || i.type === 'last_call').forEach(item => { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count }); });
                   const topicItems = sourceData.filter(i => i.type === 'specific_topic');
                   const totalTopicPct = topicItems.reduce((s, i) => s + (i.pct || 0), 0);
                   const topicCount = Math.round((totalTopicPct / 100) * totalQs);
-                  if (topicCount > 0) {
-                      plan.push({ type: 'internet', id: 'web_custom', name: 'Refuerzo Temas', count: topicCount, customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct || 0 })) });
-                  }
+                  if (topicCount > 0) { plan.push({ type: 'internet', id: 'web_custom', name: 'Refuerzo Temas', count: topicCount, customTopics: topicItems.map(t => ({ name: t.name, pct: t.pct || 0 })) }); }
               } else {
                   sourceData.forEach(item => {
-                      if(item.type === 'internet_normal_block') {
-                          const count = Math.round(((item.pct || 0) / 100) * totalQs);
-                          if (count > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: count });
-                      } else {
-                          const count = Math.round(((item.pct || 0) / 100) * totalQs);
-                          if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count });
-                      }
+                      if(item.type === 'internet_normal_block') { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: 'internet', id: 'web', name: 'Internet/General', count: count }); } 
+                      else { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count }); }
                   });
               }
 
               let queue = [];
               plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
-              
-              console.log("📋 Plan Generado (Queue):", queue);
               return queue;
           };
 
@@ -987,18 +965,15 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               if (isFetchingRef.current || batchQueue.length === 0) return;
               isFetchingRef.current = true;
               const nextBatch = batchQueue[0]; 
-              console.log("🔄 Carchando siguiente lote:", nextBatch);
               try {
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '', customTopics: nextBatch.customTopics };
                   if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); }
                   const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  
                   const existingTexts = new Set(questions.map(q => q.question.trim().toLowerCase()));
                   const uniqueNewQs = newQs.filter(q => !existingTexts.has(q.question.trim().toLowerCase()));
-                  
                   if (uniqueNewQs.length > 0) { updateState({ questions: [...questions, ...uniqueNewQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
                   else { updateState({ batchQueue: batchQueue.slice(1) }); }
-              } catch (e) { console.error("Error en loadNextBatch:", e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
+              } catch (e) { console.error(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
 
           const handleStartClick = () => {
@@ -1008,40 +983,27 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           };
 
           const startExam = async () => {
-              console.log("▶️ START EXAM pulsado");
               if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite de simulacros. Registra la aplicación.");
               if (!isAuth) setTc(prev => prev + 1);
               setShowWeightModal(false); 
               
               try {
                   const queue = generateBatchPlan();
-                  if(queue.length === 0) {
-                      console.warn("⚠️ Cola vacía. Pesos a 0.");
-                      return alert("La configuración actual no genera ninguna pregunta (0% de peso total). Revisa los pesos en 'Configuración Materia'.");
-                  }
+                  if(queue.length === 0) return alert("La configuración actual no genera ninguna pregunta (0% de peso total). Revisa los pesos en 'Configuración Materia'.");
 
-                  updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Planificando examen...', error: null });
+                  // IMPORTANT: Set loading state BEFORE async work
+                  updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Confeccionando examen...', error: null });
                   isFetchingRef.current = true;
 
                   const firstBatch = queue[0];
-                  console.log("📦 Procesando Primer Lote:", firstBatch);
-                  
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: '', customTopics: firstBatch.customTopics };
                   
                   if (firstBatch.type === 'pdf') { 
-                      try {
-                          const dbData = await getFromDB(firstBatch.id); 
-                          sc.content = (dbData && dbData.text) ? dbData.text : (typeof dbData === 'string' ? dbData : ''); 
-                          console.log("📄 PDF Cargado de DB. Longitud:", sc.content.length);
-                      } catch (dbErr) {
-                          console.error("❌ Error leyendo DB para PDF:", dbErr);
-                          throw new Error("No se pudo leer el archivo PDF de la base de datos.");
-                      }
+                      const dbData = await getFromDB(firstBatch.id); 
+                      sc.content = (dbData && dbData.text) ? dbData.text : ''; 
                   }
                   
                   const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  console.log("✅ Preguntas iniciales recibidas:", initialQs);
-
                   updateState({ 
                       questions: initialQs.map((q, i) => ({ ...q, id: i })), 
                       batchQueue: queue.slice(1), 
@@ -1051,8 +1013,8 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                       answers: {} 
                   });
               } catch (e) { 
-                  console.error("❌ EXCEPCIÓN FATAL en startExam:", e);
-                  updateState({ error: "Error crítico al iniciar: " + e.message, status: 'idle' }); 
+                  console.error(e);
+                  updateState({ error: "Error al iniciar: " + e.message, status: 'idle' }); 
               } finally { 
                   setTimeout(() => { isFetchingRef.current = false; }, 4000); 
               }
@@ -1068,11 +1030,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               setShowFinishConfirm(false);
               const { hits, misses, skips, points, maxPoints, percentage, details } = calculateStats();
               const timeSpent = (activeSubject.timeMinutes * 60) - timeLeft; 
-              onSaveResult({ 
-                  date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, 
-                  score: points, percentage, hits, misses, skips, total: activeSubject.qCount, durationSeconds: timeSpent, details,
-                  isReinforcement: isReinforcement 
-              });
+              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage, hits, misses, skips, total: activeSubject.qCount, durationSeconds: timeSpent, details, isReinforcement: isReinforcement });
               updateState({ status: 'finished' });
           };
 
@@ -1089,21 +1047,13 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               questions.forEach((q, idx) => {
                   const ans = answers[idx];
                   let type = 'skip';
-                  if (ans === undefined || ans === -1) { skips++; type = 'skip'; } 
-                  else if (ans === q.correct) { hits++; type = 'hit'; } 
-                  else { misses++; type = 'miss'; }
+                  if (ans === undefined || ans === -1) { skips++; type = 'skip'; } else if (ans === q.correct) { hits++; type = 'hit'; } else { misses++; type = 'miss'; }
                   const originKey = q.origin || "Desconocido";
                   if(!details.sources[originKey]) details.sources[originKey] = { h:0, m:0, s:0, t:0 };
-                  details.sources[originKey].t++;
-                  if(type==='hit') details.sources[originKey].h++;
-                  if(type==='miss') details.sources[originKey].m++;
-                  if(type==='skip') details.sources[originKey].s++;
+                  details.sources[originKey].t++; if(type==='hit') details.sources[originKey].h++; if(type==='miss') details.sources[originKey].m++; if(type==='skip') details.sources[originKey].s++;
                   const topicKey = q.topic || "General";
                   if(!details.topics[topicKey]) details.topics[topicKey] = { h:0, m:0, s:0, t:0 };
-                  details.topics[topicKey].t++;
-                  if(type==='hit') details.topics[topicKey].h++;
-                  if(type==='miss') details.topics[topicKey].m++;
-                  if(type==='skip') details.topics[topicKey].s++;
+                  details.topics[topicKey].t++; if(type==='hit') details.topics[topicKey].h++; if(type==='miss') details.topics[topicKey].m++; if(type==='skip') details.topics[topicKey].s++;
               });
               const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
               const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
@@ -1112,6 +1062,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           const stats = useMemo(() => status !== 'idle' ? calculateStats() : {}, [answers, questions]);
 
+          // --- PANTALLA DE SELECCIÓN (IDLE) ---
           if (status === 'idle') return (
               <div className="h-full flex flex-col items-center justify-center p-6 text-center">
                   {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
@@ -1128,83 +1079,131 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                   <input type="checkbox" checked={isReinforcement} onChange={e => setIsReinforcement(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" />
                                   <span className="font-bold text-yellow-100">SIMULACRO DE REFUERZO ESPECÍFICO DE TEMAS CONCRETOS</span>
                               </label>
-                              <p className="text-[11px] text-yellow-500/80 italic ml-8 leading-tight">
-                                  * Estos simulacros <strong>no computarán</strong> el dato de PUNTOS, NETAS en el historial global y no se verán en las gráficas de evolución general.
-                              </p>
+                              <p className="text-[11px] text-yellow-500/80 italic ml-8 leading-tight">* Estos simulacros <strong>no computarán</strong> el dato de PUNTOS, NETAS en el historial global y no se verán en las gráficas de evolución general.</p>
                           </div>
 
                           {error && <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 text-sm animate-pulse-error">{error}</div>}
                           <button onClick={handleStartClick} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
                       </div>
                   )}
+                  {showWeightModal && (<div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in"><div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] text-left"><div className="p-6 border-b border-slate-800 shrink-0"><h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-yellow-500"/> Configuración de Refuerzo</h3><p className="text-xs text-slate-400 leading-relaxed">Define los pesos (%) para este simulacro concreto.<br/><strong className="text-yellow-500">IMPORTANTE:</strong> Esta configuración es temporal y <strong>NO modificará</strong> los datos originales de la materia.</p></div><div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3"><div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-500 uppercase px-3"><div className="col-span-6">Concepto</div><div className="col-span-3 text-center">Original</div><div className="col-span-3 text-right">Refuerzo</div></div>{customWeights.map((item, i) => (<div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="col-span-6 flex items-center gap-2 min-w-0"><div className={`p-1.5 rounded shrink-0 ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>{item.type==='pdf'?<Icons.FileText size={12}/>:item.type==='last_call'?<Icons.Clock size={12}/>:<Icons.Globe size={12}/>}</div><div className="truncate text-xs font-bold text-white" title={item.name}>{item.name}</div></div><div className="col-span-3 text-center"><span className="text-xs text-slate-400 font-mono bg-slate-900/50 px-2 py-1 rounded">{item.originalPct}%</span></div><div className="col-span-3 flex items-center justify-end gap-1"><input type="number" value={item.pct} onChange={e => { const val = parseFloat(e.target.value) || 0; setCustomWeights(prev => prev.map((it, idx) => idx === i ? { ...it, pct: val } : it)); }} className="w-12 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none" /><span className="text-xs text-slate-500">%</span></div></div>))}</div><div className="p-6 border-t border-slate-800 bg-slate-900 rounded-b-2xl shrink-0 space-y-3"><div className="flex justify-between items-center text-xs font-bold mb-2"><span className="text-slate-400 uppercase tracking-widest">TOTAL PESO REFUERZO:</span><span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400 text-lg" : "text-red-400 text-lg"}>{customWeights.reduce((s, i) => s + i.pct, 0).toFixed(2)}%</span></div><button onClick={loadAIProposal} className="w-full py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Icons.BrainCircuit size={14}/> CARGAR PROPUESTA IA</button><div className="flex gap-3"><button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">CANCELAR</button><button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg shadow-yellow-900/20">COMENZAR REFUERZO</button></div></div></div></div>)}
+              </div>
+          );
 
-                  {showWeightModal && (
-                      <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in">
-                          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
-                              <div className="p-6 border-b border-slate-800 shrink-0">
-                                  <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-yellow-500"/> Configuración de Refuerzo</h3>
-                                  <p className="text-xs text-slate-400 leading-relaxed">
-                                      Define los pesos (%) para este simulacro concreto. 
-                                      <br/><strong className="text-yellow-500">IMPORTANTE:</strong> Esta configuración es temporal y <strong>NO modificará</strong> los datos originales de la materia.
-                                  </p>
-                              </div>
-                              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3">
-                                  {/* HEADER ROW */}
-                                  <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-500 uppercase px-3">
-                                      <div className="col-span-6">Concepto</div>
-                                      <div className="col-span-3 text-center">Original</div>
-                                      <div className="col-span-3 text-right">Refuerzo</div>
-                                  </div>
-                                  
-                                  {customWeights.map((item, i) => (
-                                      <div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                                          <div className="col-span-6 flex items-center gap-2 min-w-0">
-                                              <div className={`p-1.5 rounded shrink-0 ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>
-                                                  {item.type==='pdf'?<Icons.FileText size={12}/>:item.type==='last_call'?<Icons.Clock size={12}/>:<Icons.Globe size={12}/>}
-                                              </div>
-                                              <div className="truncate text-xs font-bold text-white" title={item.name}>{item.name}</div>
-                                          </div>
-                                          
-                                          {/* ORIGINAL PERCENTAGE */}
-                                          <div className="col-span-3 text-center">
-                                              <span className="text-xs text-slate-400 font-mono bg-slate-900/50 px-2 py-1 rounded">{item.originalPct}%</span>
-                                          </div>
+          // --- PANTALLA DE CARGA ---
+          if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center fade-in"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
 
-                                          {/* REINFORCEMENT PERCENTAGE (EDITABLE) */}
-                                          <div className="col-span-3 flex items-center justify-end gap-1">
-                                              <input 
-                                                  type="number" 
-                                                  value={item.pct} 
-                                                  onChange={e => {
-                                                      const val = parseFloat(e.target.value) || 0;
-                                                      setCustomWeights(prev => prev.map((it, idx) => idx === i ? { ...it, pct: val } : it));
-                                                  }}
-                                                  className="w-12 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none"
-                                              />
-                                              <span className="text-xs text-slate-500">%</span>
-                                          </div>
-                                      </div>
-                                  ))}
+          // --- PANTALLA ACTIVA ---
+          // Calculamos pacing
+          const totalExamSeconds = activeSubject.timeMinutes * 60;
+          const avgTimePerQuestion = totalExamSeconds / activeSubject.qCount;
+          const actualTimeSpent = totalExamSeconds - timeLeft;
+          const paceSeconds = (currentIndex * avgTimePerQuestion) - actualTimeSpent;
+          const paceAbs = Math.abs(paceSeconds);
+          const paceM = Math.floor(paceAbs / 60).toString().padStart(2, '0');
+          const paceS = Math.floor(paceAbs % 60).toString().padStart(2, '0');
+          const paceString = `${paceSeconds >= 0 ? '+' : '-'}${paceM}:${paceS}`;
+          const answeredCount = Object.keys(answers).length;
+          const progressPct = ((answeredCount / activeSubject.qCount) * 100).toFixed(1);
+
+          const hitPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.hits / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
+          const missPct = (stats.hits + stats.misses + stats.skips) > 0 ? ((stats.misses / (stats.hits + stats.misses + stats.skips)) * 100).toFixed(1) : "0.0";
+
+          return (
+              <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
+                  {/* HEADER SIEMPRE VISIBLE */}
+                  <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
+                      <div className="flex justify-between items-center mb-2">
+                          <div className="flex items-center gap-8">
+                              <div className="flex items-center gap-3">
+                                  <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div>
+                                  <div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div>
                               </div>
-                              <div className="p-6 border-t border-slate-800 bg-slate-900 rounded-b-2xl shrink-0 space-y-3">
-                                  <div className="flex justify-between items-center text-xs font-bold mb-2">
-                                      <span className="text-slate-400 uppercase tracking-widest">TOTAL PESO REFUERZO:</span>
-                                      <span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400 text-lg" : "text-red-400 text-lg"}>
-                                          {customWeights.reduce((s, i) => s + i.pct, 0).toFixed(2)}%
-                                      </span>
-                                  </div>
-                                  <button onClick={loadAIProposal} className="w-full py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Icons.BrainCircuit size={14}/> CARGAR PROPUESTA IA</button>
-                                  <div className="flex gap-3">
-                                      <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">CANCELAR</button>
-                                      <button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg shadow-yellow-900/20">COMENZAR REFUERZO</button>
+                              <div className="w-px h-8 bg-slate-700"></div>
+                              <div className="hidden sm:block leading-tight">
+                                  <div className="text-xl font-bold text-white leading-none">
+                                      {currentIndex + 1} <span className="text-slate-500 text-lg">/ {activeSubject.qCount}</span> 
+                                      <span className="text-sm font-mono text-blue-400 font-normal ml-2">[{progressPct}%]</span>
                                   </div>
                               </div>
                           </div>
+                          <div className="flex gap-2">
+                              <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
+                              <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
+                              <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
+                          </div>
                       </div>
-                  )}
+                      <div className="grid grid-cols-6 gap-2 mb-2 items-center">
+                          <div className="col-span-4 grid grid-cols-5 gap-2">
+                              <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs font-bold text-green-400">{stats.hits} <span className="opacity-70">({hitPct}%)</span></div></div>
+                              <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs font-bold text-red-400">{stats.misses} <span className="opacity-70">({missPct}%)</span></div></div>
+                              <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs font-bold text-slate-300">{stats.skips}</div></div>
+                              <div className="bg-indigo-900/20 border border-indigo-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-indigo-400 uppercase font-bold">[Netas]</div><div className="text-xs font-bold text-indigo-300">{stats.hits - stats.misses}</div></div>
+                              <div className="bg-purple-900/20 border border-purple-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte</div><div className="text-xs font-bold text-white">{((stats.maxPoints * activeSubject.cutOffPct)/100).toFixed(0)}</div></div>
+                          </div>
+                          <div className="bg-slate-800/80 border border-yellow-500/30 rounded p-1 flex flex-col items-center justify-center col-span-2 shadow-[0_0_10px_rgba(234,179,8,0.1)]">
+                              <div className="text-3xl font-display font-bold text-yellow-400 leading-none mb-1">{stats.points.toFixed(1)}</div>
+                              <div className="text-[9px] text-yellow-500/80 uppercase font-bold leading-none">Puntos</div>
+                              <div className="text-[10px] text-yellow-200/60 font-bold mt-1">Tasa: {((stats.hits / activeSubject.qCount) * 100).toFixed(1)}%</div>
+                          </div>
+                      </div>
+                      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700"><div className="absolute top-0 bottom-0 w-0.5 bg-white z-20 opacity-80" style={{left: `${activeSubject.cutOffPct}%`}}></div><div className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{width: `${(stats.points / stats.maxPoints) * 100}%`}}></div></div>
+                  </div>
+
+                  {/* AREA DE CONTENIDO CON FALLBACK DE CARGA */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
+                      {questions[currentIndex] ? (
+                          <div className="max-w-4xl mx-auto">
+                              <div className="flex items-center gap-2 mb-2">
+                                  <div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{questions[currentIndex].topic}</div>
+                                  <div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-indigo-700">{questions[currentIndex].origin}</div>
+                              </div>
+                              <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{questions[currentIndex].question}</h2>
+                              <div className="grid grid-cols-1 gap-3">
+                                  {questions[currentIndex].options?.slice(0, activeSubject.optionsCount).map((opt, idx) => {
+                                      let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
+                                      const isAns = answers[currentIndex] === idx;
+                                      if (answers[currentIndex] !== undefined) {
+                                          if (idx === questions[currentIndex].correct) btnClass = "bg-green-900/40 border-green-500 text-green-200";
+                                          else if (isAns) btnClass = "bg-red-900/40 border-red-500 text-red-200";
+                                          else btnClass = "opacity-50";
+                                      }
+                                      return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
+                                  })}
+                              </div>
+                              {answers[currentIndex] !== undefined && answers[currentIndex] !== questions[currentIndex].correct && (
+                                  <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm leading-relaxed">{questions[currentIndex].explanation}</div>
+                              )}
+                          </div>
+                      ) : (
+                          // FALLBACK INTERMEDIO (GENERANDO MÁS PREGUNTAS)
+                          <div className="flex flex-col items-center justify-center h-full py-20 animate-pulse">
+                              <Icons.Loader size={48} className="text-blue-500 mb-4"/>
+                              <div className="text-xl font-bold text-white text-center">GENERANDO PREGUNTAS...</div>
+                              <p className="text-slate-500 mt-2 text-sm">La IA está procesando el siguiente lote de preguntas.</p>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* FOOTER SIEMPRE VISIBLE */}
+                  <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+                       <div className="flex gap-2">
+                           <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700 transition-colors">Omitir</button>
+                           <label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label>
+                       </div>
+                       <div className="flex gap-2">
+                           <button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowLeft size={20}/></button>
+                           <button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button>
+                       </div>
+                  </div>
+
+                  <Modal isOpen={showRestartConfirm} title="¿REINICIAR EXAMEN?" message="Se perderá todo el progreso actual y volverás al inicio. Esta acción no se puede deshacer." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={executeRestart} />
+                  <Modal isOpen={showFinishConfirm} title="¿TERMINAR EXAMEN?" message="¿Estás seguro de que deseas finalizar? Se guardará el resultado actual en el historial." type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
+                  
+                  {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">{Array.from({length: activeSubject.qCount}).map((_, i) => { let bg = "bg-slate-800 text-slate-500 border-slate-700"; const ans = answers[i]; if (i < questions.length && ans !== undefined) { if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; else bg = "bg-red-900/60 text-red-400 border-red-500"; } else if (i >= questions.length) { bg = "opacity-30 border-dashed border-slate-800"; } return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button> })}</div></div></div>}
               </div>
           );
-      };
+      }; 
  
         
 

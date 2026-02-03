@@ -474,262 +474,176 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
   
       
 const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
-          const [isEditing, setIsEditing] = useState(false);
-          const [editForm, setEditForm] = useState(null);
-          const [processing, setProcessing] = useState(false);
-          const [progress, setProgress] = useState(0);
-          const [viewingFile, setViewingFile] = useState(null);
-          const [fileContent, setFileContent] = useState('');
-          const [searchingDesc, setSearchingDesc] = useState(false);
-          const [searchingLastCall, setSearchingLastCall] = useState(false);
-          const [descResults, setDescResults] = useState([]);
-          const [generatingTopics, setGeneratingTopics] = useState(false);
-          
-          const defaultSubject = { 
-              id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
-              pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, 
-              topics: [{ name: 'Temario General', pct: 100 }], files: [],
-              lastCallDate: '', lastCallPlaces: 0, lastCallCutoff: 0, lastCallLink: '', includeLastCall: false, lastCallPct: 0,
-              examWeight: 0.90, degreeGrade: 5, degreeWeight: 6, extraPoints: 0
-          };
+    const [isEditing, setIsEditing] = useState(false);
+    const [editForm, setEditForm] = useState(null);
+    const [processing, setProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [viewingFile, setViewingFile] = useState(null);
+    const [fileContent, setFileContent] = useState('');
+    const [searchingDesc, setSearchingDesc] = useState(false);
+    const [searchingLastCall, setSearchingLastCall] = useState(false);
+    const [descResults, setDescResults] = useState([]);
+    const [generatingTopics, setGeneratingTopics] = useState(false);
+    
+    const defaultSubject = { 
+        id: null, name: '', type: '', qCount: 200, cutOffPct: 90, timeMinutes: 270, 
+        pointsHit: 3, pointsMiss: -1, pointsSkip: 0, optionsCount: 4, 
+        topics: [{ name: 'Temario General', pct: 100 }], files: [],
+        lastCallDate: '', lastCallPlaces: 0, lastCallCutoff: 0, lastCallLink: '', includeLastCall: false, lastCallPct: 0,
+        examWeight: 90, degreeGrade: 5, degreeWeight: 6, extraPoints: 0
+    };
 
-          const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
-          const handleEdit = (sub) => { const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; setEditForm(safeSub); setIsEditing(true); };
-          const handleSave = () => {
-              if(!editForm.name) return alert("Nombre obligatorio");
-              const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
-              const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
-              if ((totalPdfPct + lastCallWeight) > 100) return alert(`Total porcentaje (${totalPdfPct + lastCallWeight}%) excede 100%.`);
-              setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
-              if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
-          };
-          const handleDelete = async (id, sub) => { if (confirm("¿Borrar materia?")) { if(sub.files) for(const f of sub.files) await deleteFromDB(f.id); await deleteFromDB(id); setSubjects(prev => prev.filter(s => s.id !== id)); if (activeSubjectId === id) setActiveSubjectId(null); } };
-          const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
-          
-          const handleFileUpload = async (e) => {
-              const file = e.target.files[0];
-              if (!file) return;
-              setProcessing(true); setProgress(0);
-              const fileId = `${editForm.id}_${Date.now()}`;
-              let extractionFailed = false;
-              let extractedText = "";
+    const handleNew = () => { setEditForm({ ...defaultSubject, id: Date.now() }); setIsEditing(true); };
+    const handleEdit = (sub) => { const safeSub = { ...defaultSubject, ...sub, files: sub.files || [] }; setEditForm(safeSub); setIsEditing(true); };
+    const handleSave = () => {
+        if(!editForm.name) return alert("Nombre obligatorio");
+        const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
+        const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
+        if ((totalPdfPct + lastCallWeight) > 100) return alert(`Total porcentaje (${totalPdfPct + lastCallWeight}%) excede 100%.`);
+        setSubjects(prev => { const exists = prev.find(s => s.id === editForm.id); return exists ? prev.map(s => s.id === editForm.id ? editForm : s) : [...prev, editForm]; });
+        if (!activeSubjectId) setActiveSubjectId(editForm.id); setIsEditing(false);
+    };
+    const handleDelete = async (id, sub) => { if (confirm("¿Borrar materia?")) { if(sub.files) for(const f of sub.files) await deleteFromDB(f.id); await deleteFromDB(id); setSubjects(prev => prev.filter(s => s.id !== id)); if (activeSubjectId === id) setActiveSubjectId(null); } };
+    const handleTopicChange = (idx, field, val) => { const newTopics = [...editForm.topics]; newTopics[idx][field] = val; setEditForm({ ...editForm, topics: newTopics }); };
+    
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setProcessing(true); setProgress(0);
+        const fileId = `${editForm.id}_${Date.now()}`;
+        let extractedText = "";
+        try {
+            if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                extractedText = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (event) => resolve(event.target.result); reader.onerror = (error) => reject(error); reader.readAsText(file); });
+                setProgress(100);
+            } else if (file.type === 'application/pdf') {
+                const url = URL.createObjectURL(file);
+                const loadingTask = pdfjsLib.getDocument({ url: url, cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true });
+                const pdf = await loadingTask.promise;
+                const numPages = pdf.numPages;
+                let textChunks = [];
+                for (let i = 1; i <= numPages; i++) {
+                    try { const page = await pdf.getPage(i); const content = await page.getTextContent(); textChunks.push(content.items.map(item => item.str).join(' ')); page.cleanup(); } catch (err) {} 
+                    if (i % 10 === 0 || i === numPages) { setProgress(Math.round((i / numPages) * 100)); await new Promise(r => setTimeout(r, 50)); }
+                }
+                URL.revokeObjectURL(url); loadingTask.destroy(); extractedText = textChunks.join('\n\n');
+            }
+            let extractionFailed = (!extractedText || extractedText.trim().length < 150);
+            await saveToDB(fileId, { text: extractedText || "[SIN TEXTO]", fileData: file }); 
+            const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
+            const newWeight = extractionFailed ? 0 : Math.max(0, 100 - currentTotal - (editForm.includeLastCall ? editForm.lastCallPct : 0));
+            setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: newWeight, extractionFailed: extractionFailed }] }));
+        } catch (err) { alert(`Error: ${err.message}`); } finally { setProcessing(false); }
+    };
 
-              try {
-                  if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-                      extractedText = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (event) => resolve(event.target.result); reader.onerror = (error) => reject(error); reader.readAsText(file); });
-                      setProgress(100);
-                  } else if (file.type === 'application/pdf') {
-                      const url = URL.createObjectURL(file);
-                      const loadingTask = pdfjsLib.getDocument({ url: url, cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true });
-                      const pdf = await loadingTask.promise;
-                      const numPages = pdf.numPages;
-                      let textChunks = [];
-                      for (let i = 1; i <= numPages; i++) {
-                          try { const page = await pdf.getPage(i); const content = await page.getTextContent(); textChunks.push(content.items.map(item => item.str).join(' ')); page.cleanup(); } catch (err) {} 
-                          if (i % 10 === 0 || i === numPages) { setProgress(Math.round((i / numPages) * 100)); await new Promise(r => setTimeout(r, 50)); }
-                      }
-                      URL.revokeObjectURL(url); loadingTask.destroy(); extractedText = textChunks.join('\n\n');
-                  }
+    const handleSearchDescription = async () => {
+        const apiKey = window.localStorage.getItem('gemini_api_key');
+        if(!apiKey) return alert("Falta API Key");
+        setSearchingDesc(true);
+        try {
+            const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": porcentaje_examen, "dg": nota_carrera_tipica, "dw": multiplicador_carrera, "ex": puntos_otros}].`);
+            const list = extractJSON(res);
+            if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||'', ew: i.ew || 90, dg: i.dg || 5, dw: i.dw || 6, ex: i.ex || 0}))); 
+        } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
+    };
 
-                  if (!extractedText || extractedText.trim().length < 150) { 
-                      extractionFailed = true;
-                      extractedText = "[TEXTO NO EXTRAÍDO - PDF ESCANEADO O PROTEGIDO]";
-                  }
+    if (isEditing) {
+        const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
+        const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
+        const internetPct = Math.max(0, 100 - totalPdfPct - lastCallWeight);
+        const totalMaxPoints = editForm.qCount * editForm.pointsHit;
+        const topicsTotalPct = parseFloat(editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0).toFixed(2));
 
-                  await saveToDB(fileId, { text: extractedText, fileData: file }); 
-                  
-                  const currentTotal = editForm.files.reduce((s, f) => s + f.pct, 0);
-                  const lastCallWeight = editForm.includeLastCall ? editForm.lastCallPct : 0;
-                  const newWeight = extractionFailed ? 0 : Math.max(0, 100 - currentTotal - lastCallWeight);
+        return (
+            <div className="h-full flex flex-col p-4 overflow-y-auto">
+                <div className="max-w-4xl mx-auto w-full pb-20">
+                    <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> Configuración Materia</h3>
+                    <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="text-xs text-slate-400 block mb-1">Nombre</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
+                            <div className="relative">
+                                <label className="text-xs text-slate-400 block mb-1">Oposición / Especialidad</label>
+                                <div className="flex gap-2">
+                                    <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} />
+                                    <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div><label className="text-xs text-slate-400 block mb-1">Preguntas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Corte %</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Minutos</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.timeMinutes} onChange={e => setEditForm({...editForm, timeMinutes: parseInt(e.target.value)})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
+                        </div>
+                    </div>
+                    <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-800/30 border-slate-600">
+                        <h4 className="text-sm font-bold text-slate-300 uppercase mb-4 flex items-center gap-2"><Icons.BarChart3 size={16}/> Baremo de Puntuación</h4>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div><label className="text-[10px] text-green-400 font-bold block mb-1 uppercase tracking-wider">Acierto (+)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-white text-right font-mono" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
+                            <div><label className="text-[10px] text-red-400 font-bold block mb-1 uppercase tracking-wider">Fallo (-)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-white text-right font-mono" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
+                            <div><label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Blanco</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
+                        </div>
+                    </div>
 
-                  setEditForm(prev => ({ ...prev, files: [...prev.files, { id: fileId, name: file.name, pct: newWeight, extractionFailed: extractionFailed }] }));
-                  
-              } catch (err) { alert(`Error crítico: ${err.message}`); } finally { setProcessing(false); }
-          };
+                    <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
+                        <h4 className="text-sm font-bold text-blue-400 uppercase mb-4 flex items-center gap-2"><Icons.Calculator size={16}/> Fórmula Cálculo Puntos Finales (Concurso)</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">% COMPUTA EL EXAMEN</label>
+                                <input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.examWeight} onChange={e => setEditForm({...editForm, examWeight: parseFloat(e.target.value)})} />
+                                <span className="text-[9px] text-slate-500 block mt-1 italic">Defecto: 90%</span>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Nota Carrera (1-10)</label>
+                                <input type="number" step="0.1" max="10" min="1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.degreeGrade} onChange={e => setEditForm({...editForm, degreeGrade: parseFloat(e.target.value)})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Multipl. Carrera</label>
+                                <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.degreeWeight} onChange={e => setEditForm({...editForm, degreeWeight: parseFloat(e.target.value)})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Otros / Extras</label>
+                                <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.extraPoints} onChange={e => setEditForm({...editForm, extraPoints: parseFloat(e.target.value)})} />
+                            </div>
+                        </div>
+                    </div>
 
-          const handleViewFileText = async (fileId) => { try { const data = await getFromDB(fileId); setFileContent((data && data.text) ? data.text : "Sin contenido."); setViewingFile(true); } catch(e) { setFileContent("Error: " + e.message); setViewingFile(true); } };
-          const handleOpenFileOriginal = async (fileId) => { try { const data = await getFromDB(fileId); if (data && data.fileData) window.open(URL.createObjectURL(data.fileData), '_blank'); } catch(e) { alert("Error: " + e.message); } };
-          const handleSearchDescription = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
-              setSearchingDesc(true);
-              try {
-                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": exam_weight, "dg": typical_degree_grade, "dw": typical_degree_weight, "ex": typical_extra}].`);
-                  const list = extractJSON(res);
-                  if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||'', ew: i.ew || 0.9, dg: i.dg || 5, dw: i.dw || 6, ex: i.ex || 0}))); 
-              } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
-          };
-          const handleSearchLastCall = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
-              setSearchingLastCall(true);
-              try {
-                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes. "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL", "ew": exam_weight, "dw": degree_weight}.`);
-                  const data = extractJSON(res);
-                  if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true, examWeight: data.ew || prev.examWeight, degreeWeight: data.dw || prev.degreeWeight }));
-              } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
-          };
-          const handleMagicWandTopics = async () => {
-              const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
-              setGeneratingTopics(true);
-              try { const res = await askGemini(JSON.parse(apiKey), `Temario "${editForm.type}". JSON array: [{"name": "Tema", "pct": peso}].`); const list = extractJSON(res); if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list })); } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
-          };
+                    <div className="glass-panel p-6 rounded-xl mb-6 bg-purple-900/10 border-purple-500/30">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="text-sm font-bold text-purple-400 uppercase flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria Real</h4>
+                            <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2">{searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Puntos Corte</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} /></div>
+                            <div><label className="text-xs text-slate-400 block mb-1">Enlace</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} /></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-4 pt-4 border-t border-slate-700"><button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar Materia</button></div>
+                </div>
+            </div>
+        );
+    }
 
-          if (isEditing) {
-              const totalPdfPct = editForm.files.reduce((sum, f) => sum + (f.pct || 0), 0);
-              const lastCallWeight = editForm.includeLastCall ? (editForm.lastCallPct || 0) : 0;
-              const internetPct = Math.max(0, 100 - totalPdfPct - lastCallWeight);
-              const totalMaxPoints = editForm.qCount * editForm.pointsHit;
-              const cutOffPointsEq = totalMaxPoints > 0 ? (totalMaxPoints * (editForm.cutOffPct / 100)).toFixed(1) : 0;
-              const lastCallPctEq = (totalMaxPoints > 0 && editForm.lastCallCutoff) ? ((editForm.lastCallCutoff / totalMaxPoints) * 100).toFixed(1) : 0;
-              const topicsTotalPct = parseFloat(editForm.topics.reduce((sum, t) => sum + (t.pct || 0), 0).toFixed(2));
-              const isLinkPdf = editForm.lastCallLink && editForm.lastCallLink.toLowerCase().endsWith('.pdf');
+    return (
+        <div className="h-full flex flex-col p-6 fade-in overflow-y-auto">
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-green-500 transition-colors"><Icons.Plus size={20}/> Nueva Materia</button></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+                {subjects.map(sub => (
+                    <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden transition-all ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700 hover:border-slate-500'}`}>
+                        <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4>
+                        <p className="text-xs text-slate-400 mb-2 h-8 overflow-hidden">{sub.type}</p>
+                        <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
-              return (
-                  <div className="h-full flex flex-col p-4 overflow-y-auto">
-                      <div className="max-w-4xl mx-auto w-full pb-20">
-                          <h3 className="text-xl font-display font-bold text-white mb-6 border-b border-slate-700 pb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-blue-500"/> Configuración Materia</h3>
-                          <div className="glass-panel p-6 rounded-xl mb-6 space-y-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Nombre</label><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
-                                  <div className="relative">
-                                      <label className="text-xs text-slate-400 block mb-1">Oposición / Especialidad</label>
-                                      <div className="flex gap-2">
-                                          <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} />
-                                          <button onClick={handleSearchDescription} disabled={searchingDesc} className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center min-w-[40px]">{searchingDesc ? <Icons.Loader size={16}/> : <Icons.Search size={18}/>}</button>
-                                      </div>
-                                      {descResults.length > 0 && (<div className="absolute z-50 top-full left-0 right-0 bg-slate-800 border border-slate-600 rounded mt-1 shadow-xl max-h-60 overflow-y-auto">{descResults.map((r, i) => (<button key={i} onClick={() => { setEditForm({ ...editForm, type: r.label, qCount: r.q, timeMinutes: r.t, cutOffPct: r.c, optionsCount: r.o, lastCallDate: r.last_date, lastCallPlaces: r.places, lastCallCutoff: r.cut_score, lastCallLink: r.exam_link, examWeight: r.ew, degreeGrade: r.dg, degreeWeight: r.dw, extraPoints: r.ex }); setDescResults([]); }} className="block w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-blue-600 border-b border-slate-700"><div className="font-bold">{r.label}</div></button>))}</div>)}
-                                  </div>
-                              </div>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Preguntas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.qCount} onChange={e => setEditForm({...editForm, qCount: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Corte % ({cutOffPointsEq} pts)</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.cutOffPct} onChange={e => setEditForm({...editForm, cutOffPct: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Minutos</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.timeMinutes} onChange={e => setEditForm({...editForm, timeMinutes: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Opciones</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.optionsCount} onChange={e => setEditForm({...editForm, optionsCount: parseInt(e.target.value)})} /></div>
-                              </div>
-                          </div>
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-slate-800/30 border-slate-600">
-                              <h4 className="text-sm font-bold text-slate-300 uppercase mb-4 flex items-center gap-2"><Icons.BarChart3 size={16}/> Baremo de Puntuación</h4>
-                              <div className="grid grid-cols-3 gap-4">
-                                  <div><label className="text-[10px] text-green-400 font-bold block mb-1 uppercase tracking-wider">Acierto (+)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-white text-right font-mono" value={editForm.pointsHit} onChange={e => setEditForm({...editForm, pointsHit: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-[10px] text-red-400 font-bold block mb-1 uppercase tracking-wider">Fallo (-)</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-white text-right font-mono" value={editForm.pointsMiss} onChange={e => setEditForm({...editForm, pointsMiss: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Blanco</label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.pointsSkip} onChange={e => setEditForm({...editForm, pointsSkip: parseFloat(e.target.value)})} /></div>
-                              </div>
-                          </div>
 
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-indigo-900/10 border-indigo-500/30">
-                              <h4 className="text-sm font-bold text-indigo-300 uppercase mb-4 flex items-center gap-2"><Icons.Calculator size={16}/> Fórmula Cálculo Puntos Finales (Concurso)</h4>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div>
-                                      <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Multipl. Examen</label>
-                                      <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.examWeight} onChange={e => setEditForm({...editForm, examWeight: parseFloat(e.target.value)})} />
-                                      <span className="text-[9px] text-slate-500 block mt-1 italic">Defecto: 0.90 (90%)</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Nota Carrera (1-10)</label>
-                                      <input type="number" step="0.1" max="10" min="1" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.degreeGrade} onChange={e => setEditForm({...editForm, degreeGrade: parseFloat(e.target.value)})} />
-                                      <span className="text-[9px] text-slate-500 block mt-1 italic">Defecto: 5</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Multipl. Carrera</label>
-                                      <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.degreeWeight} onChange={e => setEditForm({...editForm, degreeWeight: parseFloat(e.target.value)})} />
-                                  </div>
-                                  <div>
-                                      <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Otros / Extras</label>
-                                      <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono" value={editForm.extraPoints} onChange={e => setEditForm({...editForm, extraPoints: parseFloat(e.target.value)})} />
-                                  </div>
-                              </div>
-                          </div>
-
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-purple-900/10 border-purple-500/30">
-                              <div className="flex justify-between items-center mb-4">
-                                  <h4 className="text-sm font-bold text-purple-400 uppercase flex items-center gap-2"><Icons.Calendar size={16}/> Última Convocatoria Real</h4>
-                                  <button onClick={handleSearchLastCall} disabled={searchingLastCall} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 shadow-lg">{searchingLastCall ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button>
-                              </div>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallDate} onChange={e => setEditForm({...editForm, lastCallDate: e.target.value})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Plazas</label><input type="number" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallPlaces} onChange={e => setEditForm({...editForm, lastCallPlaces: parseInt(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Puntos Corte <span className="text-purple-400 font-bold ml-1">({lastCallPctEq}%)</span></label><input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right" value={editForm.lastCallCutoff} onChange={e => setEditForm({...editForm, lastCallCutoff: parseFloat(e.target.value)})} /></div>
-                                  <div><label className="text-xs text-slate-400 block mb-1">Enlace al Examen</label><div className="flex gap-2"><input type="text" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-xs" value={editForm.lastCallLink} onChange={e => setEditForm({...editForm, lastCallLink: e.target.value})} placeholder="Directo .pdf" />{editForm.lastCallLink && <a href={editForm.lastCallLink} target="_blank" className="p-2 bg-purple-900/50 hover:bg-purple-800 rounded text-white"><Icons.ExternalLink size={14}/></a>}</div></div>
-                              </div>
-                              {/* LEYENDA RECUPERADA */}
-                              {editForm.lastCallLink && !isLinkPdf && (
-                                  <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-500/40 rounded-lg flex gap-3 animate-pulse">
-                                      <Icons.AlertTriangle className="text-yellow-500 shrink-0" size={18} />
-                                      <div className="text-[11px] text-yellow-200 leading-tight"><span className="font-bold block mb-1 uppercase tracking-wider">Aviso de localización</span>No se ha detectado un PDF directo. El enlace apunta a la web del organismo. Para usar este examen en el simulacro, localiza el PDF manualmente en esa web, descárgalo y súbelo abajo en <b>"Temario Aportado por el Usuario"</b>.</div>
-                                  </div>
-                              )}
-                              <div className="flex items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700 mt-4">
-                                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editForm.includeLastCall} onChange={e => setEditForm({...editForm, includeLastCall: e.target.checked})} className="w-4 h-4 accent-purple-500" /><span className="text-sm font-bold text-purple-300">Incluir fuente en simulacro</span></label>
-                                  {editForm.includeLastCall && (<div className="flex items-center gap-2 ml-auto"><span className="text-xs text-slate-400">Peso:</span><input type="number" value={editForm.lastCallPct} onChange={e => setEditForm({...editForm, lastCallPct: parseFloat(e.target.value)})} className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-right text-white text-sm" /><span className="text-xs font-bold text-slate-500">%</span></div>)}
-                              </div>
-                          </div>
-                          <div className="glass-panel p-6 rounded-xl mb-6 bg-blue-900/10 border-blue-500/30">
-                              <div className="flex justify-between items-start mb-4">
-                                  <div><h4 className="text-sm font-bold text-blue-400 uppercase flex items-center gap-2"><Icons.FileText size={16}/> Temario Aportado por el Usuario</h4><p className="text-[10px] text-slate-400 mt-1 italic leading-tight">Solo PDFs originales con capa de texto. Si el archivo es un escaneo de imagen, procesar con OCR previamente.</p></div>
-                                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"><Icons.Upload size={14}/> {processing ? `${progress}%` : "Cargar"}<input type="file" accept=".pdf,.txt" className="hidden" onChange={handleFileUpload} disabled={processing} /></label>
-                              </div>
-                              <div className="space-y-2">
-                                  {editForm.files.map((file, idx) => (
-                                      <div key={file.id} className="flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
-                                          <div className={`p-2 rounded ${file.extractionFailed ? 'bg-red-900/30 text-red-500' : 'bg-blue-900/20 text-blue-400'}`}><Icons.FileText size={16}/></div>
-                                          <div className="flex-1 min-w-0">
-                                              <div className="text-sm font-bold truncate text-white">{file.name}</div>
-                                              {file.extractionFailed && <div className="text-[10px] text-red-400 font-bold flex items-center gap-1"><Icons.AlertTriangle size={10}/> TEXTO NO LEÍBLE - SOLO CONSULTA (0%)</div>}
-                                          </div>
-                                          <div className="flex items-center gap-1"><button onClick={() => handleOpenFileOriginal(file.id)} className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-[10px] text-white rounded font-bold">Abrir</button><button onClick={() => handleViewFileText(file.id)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] text-white rounded">Texto</button></div>
-                                          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded border border-slate-600 ml-2"><input type="number" value={file.pct} onChange={e => {const f = [...editForm.files]; f[idx].pct = parseFloat(e.target.value)||0; setEditForm({...editForm, files: f});}} className="w-12 bg-transparent text-right font-bold text-white text-sm focus:outline-none" /><span className="text-xs font-bold text-slate-500 pr-1">%</span></div>
-                                          <button onClick={() => { const newFiles = editForm.files.filter((_, i) => i !== idx); setEditForm({...editForm, files: newFiles}); deleteFromDB(file.id); }} className="p-2 text-slate-500 hover:text-red-400"><Icons.Trash2 size={16}/></button>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                          <div className={`glass-panel p-6 rounded-xl mb-6 transition-opacity ${internetPct === 0 ? 'opacity-50 grayscale' : 'opacity-100'}`}>
-                              <div className="flex justify-between items-center mb-4">
-                                  <label className="text-sm font-bold text-slate-300 flex items-center gap-2"><Icons.Globe size={16}/> Temario Internet / IA ({internetPct}%)</label>
-                                  <div className="flex gap-2"><button onClick={handleMagicWandTopics} disabled={internetPct === 0 || generatingTopics} className="text-xs bg-purple-600 px-3 py-1 rounded font-bold flex gap-1">{generatingTopics ? <Icons.Loader size={14}/> : <Icons.Wand size={14}/>} Auto</button><button onClick={() => setEditForm({...editForm, topics: [...editForm.topics, {name: '', pct: 0}]})} className="text-xs bg-blue-600 px-3 py-1 rounded font-bold" disabled={internetPct === 0}>+ Tema</button></div>
-                              </div>
-                              <div className="space-y-2 mb-4">
-                                  {editForm.topics.map((t, idx) => (
-                                      <div key={idx} className="flex gap-2 items-center"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white" value={t.name} onChange={e => handleTopicChange(idx, 'name', e.target.value)} disabled={internetPct === 0} /><input type="number" className="w-20 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white text-right font-mono" value={t.pct} onChange={e => handleTopicChange(idx, 'pct', parseFloat(e.target.value))} disabled={internetPct === 0}/><button onClick={() => {const newT = editForm.topics.filter((_, i) => i !== idx); setEditForm({...editForm, topics: newT});}} className="text-red-400 p-2" disabled={internetPct === 0}><Icons.Trash2 size={18} /></button></div>
-                                  ))}
-                              </div>
-                              <div className="flex justify-end items-center gap-4 text-xs font-bold border-t border-slate-700 pt-3"><span className="text-slate-400 uppercase tracking-widest">Suma Temas:</span><span className={`px-3 py-1 rounded ${topicsTotalPct === 100 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>{topicsTotalPct.toFixed(2)}% / 100%</span></div>
-                          </div>
-                          <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl mb-6 shadow-xl">
-                              <h5 className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-[0.2em] text-center">PESO DE LAS PREGUNTAS DEL SIMULACRO (TOTAL 100%)</h5>
-                              <div className="grid grid-cols-3 gap-2">
-                                  <div className="bg-purple-900/20 border border-purple-500/30 rounded p-2 text-center"><div className="text-[9px] text-purple-400 font-bold uppercase mb-1">Convocatoria</div><div className="text-lg font-display font-bold text-white">{lastCallWeight}%</div></div>
-                                  <div className="bg-blue-900/20 border border-blue-500/30 rounded p-2 text-center"><div className="text-[9px] text-blue-400 font-bold uppercase mb-1">Documentos</div><div className="text-lg font-display font-bold text-white">{totalPdfPct}%</div></div>
-                                  <div className="bg-green-900/20 border border-green-500/30 rounded p-2 text-center"><div className="text-[9px] text-green-400 font-bold uppercase mb-1">Internet/IA</div><div className="text-lg font-display font-bold text-white">{internetPct}%</div></div>
-                              </div>
-                          </div>
-                          <div className="flex gap-4 pt-4 border-t border-slate-700"><button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSave} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold flex justify-center gap-2"><Icons.Save size={18}/> Guardar Materia</button></div>
-                      </div>
-                      {viewingFile && <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6" onClick={() => setViewingFile(null)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Texto extraído</h3><button onClick={() => setViewingFile(null)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div><textarea readOnly className="flex-1 bg-black text-white font-mono text-xs p-4 rounded-xl border border-slate-800 focus:outline-none resize-none" value={fileContent}></textarea></div></div>}
-                  </div>
-              );
-          }
-
-          return (
-              <div className="h-full flex flex-col p-6 fade-in overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-display font-bold text-white">Materias</h3><button onClick={handleNew} className="bg-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-green-500 transition-colors"><Icons.Plus size={20}/> Nueva Materia</button></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-                      {subjects.map(sub => (
-                          <div key={sub.id} onClick={() => setActiveSubjectId(sub.id)} className={`p-6 rounded-2xl border-2 cursor-pointer group relative overflow-hidden transition-all ${activeSubjectId === sub.id ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-slate-900/50 border-slate-700 hover:border-slate-500'}`}>
-                              {sub.files?.length > 0 && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold flex items-center gap-1"><Icons.FileText size={10}/> {sub.files.length} Docs</div>}
-                              <div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${activeSubjectId === sub.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}><Icons.BookOpen size={24} /></div></div>
-                              <h4 className="text-lg font-bold text-white mb-1 truncate">{sub.name}</h4>
-                              <p className="text-xs text-slate-400 mb-2 h-8 overflow-hidden">{sub.type}</p>
-                              {activeSubjectId === sub.id && <div className="mb-4 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div><span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Seleccionada para Simulacro</span></div>}
-                              <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100"><button onClick={(e) => { e.stopPropagation(); handleEdit(sub); }} className="p-2 hover:bg-slate-700 rounded text-blue-400"><Icons.Settings size={18}/></button><button onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub); }} className="p-2 hover:bg-slate-700 rounded text-red-400"><Icons.Trash2 size={18}/></button></div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          );
-      };
+        
 
   const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
           const [analysis, setAnalysis] = useState(null);
@@ -887,356 +801,223 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
       };
 
 
- 
-  const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
-          const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
-          const [showRestartConfirm, setShowRestartConfirm] = useState(false);
-          const [showFinishConfirm, setShowFinishConfirm] = useState(false);
-          const [isReinforcement, setIsReinforcement] = useState(false);
-          const [showWeightModal, setShowWeightModal] = useState(false);
-          const [customWeights, setCustomWeights] = useState([]);
-          const [showDeepDive, setShowDeepDive] = useState(false);
-          const [deepDiveContent, setDeepDiveContent] = useState('');
-          const [loadingDeepDive, setLoadingDeepDive] = useState(false);
-          const [apiKey] = usePersistentState('gemini_api_key', '');
-          const isFetchingRef = useRef(false);
+ const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+    const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
+    const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+    const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+    const [isReinforcement, setIsReinforcement] = useState(false);
+    const [showWeightModal, setShowWeightModal] = useState(false);
+    const [customWeights, setCustomWeights] = useState([]);
+    const [showDeepDive, setShowDeepDive] = useState(false);
+    const [deepDiveContent, setDeepDiveContent] = useState('');
+    const [loadingDeepDive, setLoadingDeepDive] = useState(false);
+    const [apiKey] = usePersistentState('gemini_api_key', '');
+    const isFetchingRef = useRef(false);
 
-          const calculateStats = () => {
-              let hits = 0, misses = 0, skips = 0;
-              const details = { sources: {}, topics: {} };
-              questions.forEach((q, idx) => {
-                  const ans = answers[idx];
-                  let type = 'skip';
-                  if (ans === undefined || ans === -1) { skips++; type = 'skip'; } 
-                  else if (ans === q.correct) { hits++; type = 'hit'; } 
-                  else { misses++; type = 'miss'; }
-                  const originKey = q.origin || "Desconocido";
-                  if(!details.sources[originKey]) details.sources[originKey] = { h:0, m:0, s:0, t:0 };
-                  details.sources[originKey].t++; if(type==='hit') details.sources[originKey].h++; if(type==='miss') details.sources[originKey].m++; if(type==='skip') details.sources[originKey].s++;
-                  const topicKey = q.topic || "General";
-                  if(!details.topics[topicKey]) details.topics[topicKey] = { h:0, m:0, s:0, t:0 };
-                  details.topics[topicKey].t++; if(type==='hit') details.topics[topicKey].h++; if(type==='miss') details.topics[topicKey].m++; if(type==='skip') details.topics[topicKey].s++;
-              });
-              const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
-              const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
-              return { hits, misses, skips, points, maxPoints, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0, details, netas: hits - misses };
-          };
+    const calculateStats = () => {
+        let hits = 0, misses = 0, skips = 0;
+        const details = { sources: {}, topics: {} };
+        questions.forEach((q, idx) => {
+            const ans = answers[idx];
+            let type = 'skip';
+            if (ans === undefined || ans === -1) { skips++; type = 'skip'; } 
+            else if (ans === q.correct) { hits++; type = 'hit'; } 
+            else { misses++; type = 'miss'; }
+            const originKey = q.origin || "Desconocido";
+            if(!details.sources[originKey]) details.sources[originKey] = { h:0, m:0, s:0, t:0 };
+            details.sources[originKey].t++; if(type==='hit') details.sources[originKey].h++; if(type==='miss') details.sources[originKey].m++; if(type==='skip') details.sources[originKey].s++;
+            const topicKey = q.topic || "General";
+            if(!details.topics[topicKey]) details.topics[topicKey] = { h:0, m:0, s:0, t:0 };
+            details.topics[topicKey].t++; if(type==='hit') details.topics[topicKey].h++; if(type==='miss') details.topics[topicKey].m++; if(type==='skip') details.topics[topicKey].s++;
+        });
+        const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
+        const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
+        return { hits, misses, skips, points, maxPoints, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0, details, netas: hits - misses };
+    };
 
-          const stats = useMemo(() => {
-              if (status === 'idle' || status === 'loading' || questions.length === 0) 
-                return { hits: 0, misses: 0, skips: 0, points: 0, netas: 0, maxPoints: 1, percentage: 0 };
-              return calculateStats();
-          }, [answers, questions, status]);
+    const stats = useMemo(() => {
+        if (status === 'idle' || status === 'loading' || questions.length === 0) 
+            return { hits: 0, misses: 0, skips: 0, points: 0, netas: 0, maxPoints: 1, percentage: 0 };
+        return calculateStats();
+    }, [answers, questions, status]);
 
-          useEffect(() => {
-              let timer;
-              if (status === 'active' && timeLeft > 0) { 
-                  timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000); 
-              } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
-              return () => clearInterval(timer);
-          }, [status, timeLeft]);
+    useEffect(() => {
+        let timer;
+        if (status === 'active' && timeLeft > 0) { 
+            timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000); 
+        } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
+        return () => clearInterval(timer);
+    }, [status, timeLeft]);
 
-          useEffect(() => {
-              if (status === 'active' && !isFetchingRef.current && questions.length < activeSubject.qCount) {
-                  if (questions.length - currentIndex < 5) loadNextBatch();
-              }
-          }, [currentIndex, status, questions.length]);
+    const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
 
-          useEffect(() => {
-              if (showWeightModal && activeSubject) {
-                  const baseItems = [];
-                  if (activeSubject.files) activeSubject.files.forEach(f => baseItems.push({ type: 'pdf', id: f.id, name: f.name, pct: 0, originalPct: f.pct || 0 }));
-                  if (activeSubject.includeLastCall) baseItems.push({ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: 0, originalPct: activeSubject.lastCallPct || 0 });
-                  activeSubject.topics.forEach(t => baseItems.push({ type: 'specific_topic', id: t.name, name: t.name, pct: 0, originalPct: t.pct || 0 }));
-                  const aiProposalRaw = window.localStorage.getItem('bg_reinforcement_proposal');
-                  const manualRaw = window.localStorage.getItem('bg_last_reinforcement_manual_' + activeSubject.id);
-                  let sourceWeights = null;
-                  if (aiProposalRaw) { const aiData = JSON.parse(aiProposalRaw); if (aiData.subjectId === activeSubject.id) sourceWeights = aiData.weights; }
-                  if (!sourceWeights && manualRaw) sourceWeights = JSON.parse(manualRaw);
-                  if (sourceWeights) {
-                      const mergedItems = baseItems.map(item => {
-                          const match = sourceWeights.find(w => w.name === item.name);
-                          return match ? { ...item, pct: parseFloat(match.pct) || 0 } : item;
-                      });
-                      setCustomWeights(mergedItems);
-                  } else { setCustomWeights(baseItems); }
-              }
-          }, [showWeightModal, activeSubject]);
+    const executeRestart = () => {
+        setShowRestartConfirm(false);
+        setSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
+    };
 
-          const updateState = (updates) => setSession(prev => ({ ...prev, ...updates }));
+    const executeFinish = () => {
+        setShowFinishConfirm(false);
+        const finalStats = calculateStats();
+        onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, misses: finalStats.misses, skips: finalStats.skips, total: activeSubject.qCount, details: finalStats.details, isReinforcement: isReinforcement });
+    };
 
-          const executeRestart = () => {
-              if (!isAuth && trialCount >= 10) return alert("Límite de cortesía alcanzado.");
-              if (!isAuth) setTc(prev => prev + 1);
-              setShowRestartConfirm(false);
-              setSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
-          };
+    const handleAnswer = (optionIdx) => {
+        updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
+        if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
+        if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) { setTimeout(() => setShowFinishConfirm(true), 500); }
+    };
 
-          const executeFinish = () => {
-              setShowFinishConfirm(false);
-              const finalStats = calculateStats();
-              const timeSpent = (activeSubject.timeMinutes * 60) - timeLeft; 
-              onSaveResult({ date: new Date().toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: finalStats.points, percentage: finalStats.percentage, hits: finalStats.hits, misses: finalStats.misses, skips: finalStats.skips, total: activeSubject.qCount, durationSeconds: timeSpent, details: finalStats.details, isReinforcement: isReinforcement });
-          };
+    const startExam = async () => {
+        updateState({ status: 'loading', loadingMsg: 'Generando examen...', error: null });
+        try {
+            const q = await fetchBatch(apiKey, activeSubject, 5, 0, { type: 'internet', name: 'Web' });
+            updateState({ questions: q, status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
+        } catch (e) { updateState({ status: 'idle' }); alert(e.message); }
+    };
 
-          const handleAnswer = (optionIdx) => {
-              updateState({ answers: { ...answers, [currentIndex]: optionIdx } });
-              if (autoNext && currentIndex < questions.length - 1) setTimeout(() => updateState({ currentIndex: currentIndex + 1 }), 300);
-              if (currentIndex === activeSubject.qCount - 1 && optionIdx !== -1) { setTimeout(() => setShowFinishConfirm(true), 500); }
-          };
+    if (status === 'loading') return <div className="h-full flex flex-col items-center justify-center fade-in"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg}</h3></div>;
 
-          const startExam = async () => {
-              if (!isAuth && trialCount >= 10) return alert("Has alcanzado el límite.");
-              if (!isAuth) setTc(prev => prev + 1);
-              setShowWeightModal(false); 
-              try {
-                  const queue = generateBatchPlan();
-                  if(queue.length === 0) return alert("Configuración con 0% de peso.");
-                  updateState({ batchQueue: queue, status: 'loading', loadingMsg: 'Confeccionando examen...', error: null });
-                  isFetchingRef.current = true;
-                  const firstBatch = queue[0];
-                  let sc = { type: firstBatch.type, name: firstBatch.name, content: '', customTopics: firstBatch.customTopics };
-                  if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : ''; }
-                  const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
-                  updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
-              } catch (e) { updateState({ error: "Error: " + e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
-          };
-
-          const handleDeepDive = async () => {
-              const currentQ = questions[currentIndex];
-              if(!currentQ) return;
-              setLoadingDeepDive(true); setShowDeepDive(true); setDeepDiveContent('');
-              try {
-                  const prompt = `Actúa como preparador. Pregunta: "${currentQ.question}". Correcta: "${currentQ.options[currentQ.correct]}". Reglas: 1. Sin saludos. 2. Usa UNICODE (→, ✅). 3. Bloques: 📘 FUNDAMENTO TEÓRICO y 🧠 CLAVE DE MEMORIZACIÓN.`;
-                  const text = await askGemini(apiKey, prompt);
-                  setDeepDiveContent(text);
-              } catch (e) { setDeepDiveContent("Error al conectar con la IA."); } finally { setLoadingDeepDive(false); }
-          };
-
-          const loadAIProposal = () => {
-              const saved = window.localStorage.getItem('bg_reinforcement_proposal');
-              if (saved) {
-                  const data = JSON.parse(saved);
-                  if (data.subjectId === activeSubject.id && data.weights) {
-                      setCustomWeights(prev => prev.map(item => {
-                          if (item.type === 'specific_topic') { const match = data.weights.find(w => w.name === item.name); return match ? { ...item, pct: parseFloat(match.pct) || 0 } : { ...item, pct: 0 }; }
-                          return { ...item, pct: 0 };
-                      }));
-                      alert("✅ Propuesta de la IA cargada.");
-                  } else alert("Propuesta no válida para esta materia.");
-              } else alert("No hay propuesta guardada.");
-          };
-
-          const generateBatchPlan = () => {
-              const totalQs = activeSubject.qCount;
-              let plan = [];
-              const usedPct = ((activeSubject.files||[]).reduce((s,f)=>s+(f.pct||0),0) + (activeSubject.includeLastCall ? (activeSubject.lastCallPct||0) : 0));
-              const internetPct = Math.max(0, 100 - usedPct);
-              const sourceData = isReinforcement ? customWeights : [
-                  ...(activeSubject.files || []).map(f => ({ type: 'pdf', id: f.id, name: f.name, pct: f.pct || 0 })),
-                  ...(activeSubject.includeLastCall ? [{ type: 'last_call', id: 'last_call', name: `Conv. ${activeSubject.lastCallDate}`, pct: activeSubject.lastCallPct || 0 }] : []),
-                  { type: 'internet_normal_block', pct: internetPct, customTopics: activeSubject.topics }
-              ];
-              if (isReinforcement) {
-                  window.localStorage.setItem('bg_last_reinforcement_manual_' + activeSubject.id, JSON.stringify(customWeights));
-                  sourceData.filter(i => (i.type === 'pdf' || i.type === 'last_call') && i.pct > 0).forEach(item => { const count = Math.round((item.pct / 100) * totalQs); if (count > 0) plan.push({ type: item.type, id: item.id, name: item.name, count: count }); });
-                  const topics = sourceData.filter(i => i.type === 'specific_topic' && i.pct > 0);
-                  const topicCount = Math.round((topics.reduce((s, i) => s + i.pct, 0) / 100) * totalQs);
-                  if (topicCount > 0) plan.push({ type: 'internet', id: 'web_reinf', name: 'Refuerzo Temas', count: topicCount, customTopics: topics });
-              } else {
-                  sourceData.forEach(item => { const count = Math.round(((item.pct || 0) / 100) * totalQs); if (count > 0) plan.push({ type: item.type === 'internet_normal_block' ? 'internet' : item.type, id: item.id || 'web', name: item.name || 'Internet', count: count, customTopics: item.customTopics }); });
-              }
-              let queue = [];
-              plan.forEach(source => { let remain = source.count; while(remain > 0) { const amount = Math.min(remain, 5); queue.push({ ...source, amount: amount }); remain -= amount; } });
-              return queue;
-          };
-
-          const loadNextBatch = async () => {
-              if (isFetchingRef.current || batchQueue.length === 0) return;
-              isFetchingRef.current = true;
-              const nextBatch = batchQueue[0]; 
-              try {
-                  let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '', customTopics: nextBatch.customTopics };
-                  if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : ''; }
-                  const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
-                  if (newQs.length > 0) { updateState({ questions: [...questions, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
-                  else { updateState({ batchQueue: batchQueue.slice(1) }); }
-              } catch (e) { console.error(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
-          };
-
-          if (status === 'loading') {
-              return <div className="h-full flex flex-col items-center justify-center fade-in"><Icons.Loader size={48} className="text-blue-500 mb-4"/><h3 className="text-xl font-bold text-white animate-pulse">{loadingMsg || "Cargando..."}</h3></div>;
-          }
-
-          if (status === 'idle') {
-              return (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                    {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
-                        <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
-                            <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
-                            <p className="text-slate-400 mb-8">{activeSubject.type}</p>
-                            <div className="flex justify-center gap-4 mb-8">
-                                {activeSubject.files?.length > 0 && <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>}
-                                {activeSubject.includeLastCall && <div className="bg-purple-900/30 border border-purple-500/50 px-4 py-2 rounded-lg text-sm text-purple-200 flex items-center gap-2"><Icons.Clock size={18}/> Convocatoria</div>}
-                            </div>
-                            <div className="mb-8 p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-left">
-                                <label className="flex items-center gap-3 cursor-pointer mb-2"><input type="checkbox" checked={isReinforcement} onChange={e => setIsReinforcement(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" /><span className="font-bold text-yellow-100 uppercase text-xs">Simulacro de Refuerzo Específico</span></label>
-                                <p className="text-[10px] text-yellow-500/80 italic ml-8 leading-tight">* No computará para medias globales de puntos ni gráficas de evolución.</p>
-                            </div>
-                            <button onClick={() => { if (!activeSubject || !apiKey) alert("Configuración incompleta."); else if (isReinforcement) setShowWeightModal(true); else startExam(); }} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
+    if (status === 'idle') {
+        return (
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                {!activeSubject ? <div className="text-slate-500">Selecciona materia</div> : (
+                    <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
+                        <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
+                        <p className="text-slate-400 mb-8">{activeSubject.type}</p>
+                        <div className="flex justify-center gap-4 mb-8">
+                            {activeSubject.files?.length > 0 && <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>}
+                            {activeSubject.includeLastCall && <div className="bg-purple-900/30 border border-purple-500/50 px-4 py-2 rounded-lg text-sm text-purple-200 flex items-center gap-2"><Icons.Clock size={18}/> Convocatoria</div>}
                         </div>
+                        <div className="mb-8 p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-left">
+                            <label className="flex items-center gap-3 cursor-pointer mb-2"><input type="checkbox" checked={isReinforcement} onChange={e => setIsReinforcement(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" /><span className="font-bold text-yellow-100 uppercase text-xs">Simulacro de Refuerzo Específico</span></label>
+                            <p className="text-[10px] text-yellow-500/80 italic ml-8 leading-tight">* No computará para medias globales.</p>
+                        </div>
+                        <button onClick={startExam} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    if (status === 'active') {
+        const totalMaxPuntosExamen = activeSubject.qCount * activeSubject.pointsHit; // Escala máxima de la barra (ej: 600)
+        
+        // El examen solo aporta un % de esos puntos máximos al final
+        const puntosAportadosExamen = stats.points * (activeSubject.examWeight / 100);
+        const puntosMeritos = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
+        const notaFinalTotal = puntosAportadosExamen + puntosMeritos;
+        
+        // Posición de la raya amarilla: El máximo de puntos que el examen puede dar (ej: 600 * 90% = 540)
+        const techoExamenPuntos = totalMaxPuntosExamen * (activeSubject.examWeight / 100);
+        const rayaAmarillaPosPct = (techoExamenPuntos / totalMaxPuntosExamen) * 100;
+        
+        // Relleno de la barra: La nota final total sobre la escala máxima
+        const barRellenoPct = Math.min(100, (notaFinalTotal / totalMaxPuntosExamen) * 100);
+
+        const qTotal = activeSubject.qCount || 1;
+        const hPct = ((stats.hits / qTotal) * 100).toFixed(1);
+        const mPct = ((stats.misses / qTotal) * 100).toFixed(1);
+        const sPct = ((stats.skips / qTotal) * 100).toFixed(1);
+
+        return (
+            <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
+                <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
+                    <div className="flex justify-between items-center mb-2">
+                        <div className="flex items-center gap-8">
+                            <div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded">{formatTime(timeLeft)}</div>
+                            <div className="text-xl font-bold text-white">{currentIndex + 1} / {activeSubject.qCount}</div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 rounded text-blue-400"><Icons.Grid size={18}/></button>
+                            <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 rounded text-xs">Re-iniciar</button>
+                            <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 rounded text-xs">Terminar</button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 items-stretch">
+                        <div className="bg-indigo-900/40 border-2 border-indigo-500/50 rounded-xl p-3 flex flex-col items-center justify-center">
+                            <div className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mb-1">Netas (aciertos-fallos)</div>
+                            <div className="text-3xl font-display font-bold text-white leading-none">{stats.netas}</div>
+                        </div>
+                        <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-3 flex flex-col items-center justify-center">
+                            <div className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Puntos Brutos</div>
+                            <div className="text-2xl font-display font-bold text-blue-400 leading-none">{stats.points.toFixed(1)}</div>
+                        </div>
+                        <div className="col-span-1 md:col-span-2 bg-green-900/20 border-2 border-green-500/40 rounded-xl p-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <div className="text-[9px] text-green-500 uppercase font-bold tracking-widest mb-1">Nota Final (Corte Combinado)</div>
+                                <div className="text-3xl font-display font-bold text-white leading-none">{notaFinalTotal.toFixed(2)}</div>
+                            </div>
+                            <div className="text-right border-l border-green-500/30 pl-4">
+                                <div className="text-[8px] text-slate-400 mb-0.5">Examen ({activeSubject.examWeight}%): <span className="text-white font-bold">{puntosAportadosExamen.toFixed(2)}</span></div>
+                                <div className="text-[8px] text-slate-400">Méritos: <span className="text-white font-bold">{puntosMeritos.toFixed(2)}</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 mb-3 items-center px-1">
+                        <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs text-green-400 font-bold">{stats.hits} <span className="ml-1 font-bold">[{hPct}%]</span></div></div>
+                        <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs text-red-400 font-bold">{stats.misses} <span className="ml-1 font-bold">[{mPct}%]</span></div></div>
+                        <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs text-slate-300 font-bold">{stats.skips} <span className="ml-1 font-bold">[{sPct}%]</span></div></div>
+                        <div className="bg-purple-900/20 border border-purple-500/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte Oficial</div><div className="text-xs font-bold text-white">{activeSubject.lastCallCutoff}</div></div>
+                    </div>
+
+                    {/* BARRA TÉCNICA ESCALA FIJA AL EXAMEN */}
+                    <div className="relative pt-1 pb-8 px-1">
+                        <div className="relative h-6 bg-slate-800/50 rounded-lg border border-slate-700">
+                            {/* Graduación cada 40 pts */}
+                            <div className="absolute inset-0 flex pointer-events-none">
+                                {Array.from({ length: Math.floor(totalMaxPuntosExamen / 40) + 1 }).map((_, i) => (
+                                    <div key={i} className="absolute h-full border-l border-white/5" style={{ left: `${(i * 40 / totalMaxPuntosExamen) * 100}%` }}>
+                                        <span className="absolute -bottom-5 -left-2 text-[7px] text-slate-600 font-bold">{i * 40}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Barra de Relleno (Nota Final) */}
+                            <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-green-500 to-green-400 transition-all duration-500 flex items-center justify-end pr-2 min-w-[2px]" style={{ width: `${barRellenoPct}%` }}>
+                                <span className="text-[10px] font-black text-white drop-shadow-md whitespace-nowrap">{notaFinalTotal.toFixed(1)}</span>
+                            </div>
+
+                            {/* Rallita Amarilla Vertical: Máximo Examen */}
+                            <div className="absolute top-0 h-full w-0.5 bg-yellow-400 z-20 shadow-[0_0_8px_rgba(250,204,21,0.6)]" style={{ left: `${rayaAmarillaPosPct}%` }}>
+                                <span className="absolute -top-4 left-0 text-[6px] text-yellow-400 font-bold whitespace-nowrap bg-black/80 px-1 rounded">MÁX EXAMEN ({techoExamenPuntos.toFixed(0)})</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
+                    {questions[currentIndex] ? (
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex items-center gap-2 mb-2"><div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{questions[currentIndex].topic}</div><div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-indigo-700">{questions[currentIndex].origin}</div></div>
+                            <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{questions[currentIndex].question}</h2>
+                            <div className="grid grid-cols-1 gap-3">
+                                {questions[currentIndex].options?.map((opt, idx) => {
+                                    let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
+                                    if (answers[currentIndex] !== undefined) { if (idx === questions[currentIndex].correct) btnClass = "bg-green-900/40 border-green-500 text-green-200"; else if (answers[currentIndex] === idx) btnClass = "bg-red-900/40 border-red-500 text-red-200"; else btnClass = "opacity-50"; }
+                                    return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
+                                })}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold text-white text-center uppercase">Cargando...</div></div>
                     )}
-                    {showWeightModal && (<div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in"><div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] text-left"><div className="p-6 border-b border-slate-800 shrink-0"><h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-yellow-500"/> Configuración de Refuerzo</h3><p className="text-xs text-slate-400">Define los pesos para este simulacro. No altera la materia.</p></div><div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3"><div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-500 uppercase px-3"><div className="col-span-6">Concepto</div><div className="col-span-3 text-center">Original</div><div className="col-span-3 text-right">Refuerzo</div></div>{customWeights.map((item, i) => (<div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="col-span-6 flex items-center gap-2 min-w-0"><div className={`p-1.5 rounded shrink-0 ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>{item.type==='pdf'?<Icons.FileText size={12}/>:item.type==='last_call'?<Icons.Clock size={12}/>:<Icons.Globe size={12}/>}</div><div className="truncate text-xs font-bold text-white" title={item.name}>{item.name}</div></div><div className="col-span-3 text-center"><span className="text-xs text-slate-400 font-mono bg-slate-900/50 px-2 py-1 rounded">{item.originalPct}%</span></div><div className="col-span-3 flex items-center justify-end gap-1"><input type="number" value={item.pct} onChange={e => { const val = parseFloat(e.target.value) || 0; setCustomWeights(prev => prev.map((it, idx) => idx === i ? { ...it, pct: val } : it)); }} className="w-12 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none" /><span className="text-xs text-slate-500">%</span></div></div>))}</div><div className="p-6 border-t border-slate-800 bg-slate-900 rounded-b-2xl shrink-0 space-y-3"><div className="flex justify-between items-center text-xs font-bold mb-2"><span className="text-slate-400 uppercase tracking-widest">TOTAL PESO:</span><span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400 text-lg" : "text-red-400 text-lg"}>{customWeights.reduce((s, i) => s + i.pct, 0).toFixed(2)}%</span></div><button onClick={loadAIProposal} className="w-full py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Icons.BrainCircuit size={14}/> CARGAR PROPUESTA IA</button><div className="flex gap-3"><button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">CANCELAR</button><button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg">COMENZAR</button></div></div></div></div>)}
                 </div>
-              );
-          }
 
-          if (status === 'active') {
-            const totalExamSeconds = activeSubject.timeMinutes * 60;
-            const paceSeconds = (currentIndex * (totalExamSeconds / activeSubject.qCount)) - (totalExamSeconds - timeLeft);
-            const paceAbs = Math.abs(paceSeconds);
-            const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(paceAbs/60).toString().padStart(2,'0')}:${Math.floor(paceAbs%60).toString().padStart(2,'0')}`;
-            const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
-
-            // CÁLCULOS DE PUNTUACIÓN REALES
-            const examWeightedPoints = stats.points * (activeSubject.examWeight || 0.90);
-            const meritsTotalPoints = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
-            const finalCombinedTotal = examWeightedPoints + meritsTotalPoints;
-            
-            // ESCALA DE LA BARRA TÉCNICA
-            const maxPossibleExamRaw = activeSubject.qCount * activeSubject.pointsHit;
-            const maxWeightedExam = maxPossibleExamRaw * (activeSubject.examWeight || 0.90);
-            const maxMeritVal = (10 * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
-            const totalScaleRange = maxWeightedExam + maxMeritVal;
-
-            const separatorPos = (maxWeightedExam / totalScaleRange) * 100;
-            const currentProgressPos = (finalCombinedTotal / totalScaleRange) * 100;
-            const cutoffPosMarker = ((activeSubject.lastCallCutoff || 0) / totalScaleRange) * 100;
-
-            const totalQs = activeSubject.qCount || 1;
-            const hPct = ((stats.hits / totalQs) * 100).toFixed(1);
-            const mPct = ((stats.misses / totalQs) * 100).toFixed(1);
-            const sPct = ((stats.skips / totalQs) * 100).toFixed(1);
-
-            return (
-                <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
-                    <div className="shrink-0 bg-slate-900 border-b border-slate-800 p-2 z-10 shadow-xl">
-                        <div className="flex justify-between items-center mb-2">
-                            <div className="flex items-center gap-8"><div className="flex items-center gap-3"><div className="text-xl font-mono font-bold text-white bg-slate-800 px-2 py-1 rounded border border-slate-700">{formatTime(timeLeft)}</div><div className={`text-xs font-bold ${paceSeconds >= 0 ? 'text-green-400' : 'text-red-400'}`}>{paceString}</div></div><div className="w-px h-8 bg-slate-700"></div><div className="text-xl font-bold text-white">{currentIndex + 1} / {activeSubject.qCount} <span className="text-xs text-blue-400 ml-2">[{progressPct}%]</span></div></div>
-                            <div className="flex gap-2">
-                                <button onClick={() => updateState({ showGrid: true })} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-blue-400"><Icons.Grid size={18}/></button>
-                                <button onClick={() => setShowRestartConfirm(true)} className="px-3 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-200 rounded text-xs font-bold border border-yellow-800">Re-iniciar</button>
-                                <button onClick={() => setShowFinishConfirm(true)} className="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-200 rounded text-xs font-bold border border-red-800">Terminar</button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 items-stretch">
-                            <div className="bg-indigo-900/40 border-2 border-indigo-500/50 rounded-xl p-3 flex flex-col items-center justify-center">
-                                <div className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mb-1">Netas (aciertos-fallos)</div>
-                                <div className="text-3xl font-display font-bold text-white leading-none">{stats.netas}</div>
-                            </div>
-                            <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-3 flex flex-col items-center justify-center">
-                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Puntos Brutos</div>
-                                <div className="text-2xl font-display font-bold text-blue-400 leading-none">{stats.points.toFixed(1)}</div>
-                            </div>
-                            <div className="col-span-1 md:col-span-2 bg-green-900/20 border-2 border-green-500/40 rounded-xl p-3 flex items-center justify-between">
-                                <div className="flex flex-col">
-                                    <div className="text-[9px] text-green-500 uppercase font-bold tracking-widest mb-1">Nota Final (Corte Combinado)</div>
-                                    <div className="text-3xl font-display font-bold text-white leading-none">{finalCombinedTotal.toFixed(2)}</div>
-                                </div>
-                                <div className="text-right border-l border-green-500/30 pl-4">
-                                    <div className="text-[8px] text-slate-400 mb-0.5">Examen ({(activeSubject.examWeight*100).toFixed(0)}%): <span className="text-white font-bold">{examWeightedPoints.toFixed(2)}</span></div>
-                                    <div className="text-[8px] text-slate-400">Méritos: <span className="text-white font-bold">{meritsTotalPoints.toFixed(2)}</span></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-2 mb-3 items-center">
-                            <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs text-green-400 font-bold">{stats.hits} <span className="ml-1">[{hPct}%]</span></div></div>
-                            <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs text-red-400 font-bold">{stats.misses} <span className="ml-1">[{mPct}%]</span></div></div>
-                            <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs text-slate-300 font-bold">{stats.skips} <span className="ml-1">[{sPct}%]</span></div></div>
-                            <div className="bg-purple-900/20 border border-purple-500/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte Ex.</div><div className="text-xs font-bold text-white">{((maxPossibleExamRaw * activeSubject.cutOffPct)/100).toFixed(1)}</div></div>
-                        </div>
-
-                        {/* BARRA TÉCNICA MEJORADA */}
-                        <div className="relative pt-1 pb-6 px-1">
-                            <div className="relative h-6 bg-slate-800/50 rounded-lg overflow-visible border border-slate-700">
-                                {/* Ticks cada 40 puntos con número debajo */}
-                                <div className="absolute inset-0 flex pointer-events-none overflow-visible">
-                                    {Array.from({ length: Math.floor(totalScaleRange / 40) + 1 }).map((_, i) => (
-                                        <div key={i} className="absolute h-full border-l border-white/10" style={{ left: `${(i * 40 / totalScaleRange) * 100}%` }}>
-                                            <span className="absolute -bottom-5 -left-2 text-[7px] text-slate-500 font-bold">{i * 40}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                {/* Separador Fases */}
-                                <div className="absolute top-0 h-full w-px bg-white/30 z-10" style={{ left: `${separatorPos}%` }}>
-                                    <div className="absolute -top-3 left-0.5 text-[5px] text-slate-400 uppercase font-bold whitespace-nowrap bg-black/50 px-1">Límite Oposición</div>
-                                </div>
-
-                                {/* Barra de Relleno (Nota Final Actual) */}
-                                <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-green-500 to-green-400 transition-all duration-500 flex items-center justify-end pr-2 min-w-[2px]" style={{ width: `${currentProgressPos}%` }}>
-                                    {currentProgressPos > 12 && (
-                                        <span className="text-[10px] font-black text-white drop-shadow-md whitespace-nowrap">
-                                            {finalCombinedTotal.toFixed(1)} <span className="text-[7px] opacity-80">pts</span>
-                                        </span>
-                                    )}
-                                </div>
-                                
-                                {/* Marcador de Corte Amarillo de Convocatoria */}
-                                {activeSubject.lastCallCutoff > 0 && (
-                                    <div className="absolute top-0 h-full w-0.5 bg-yellow-400 z-20 shadow-[0_0_8px_rgba(250,204,21,0.6)]" style={{ left: `${cutoffPosMarker}%` }}>
-                                        <div className="absolute -top-1.5 -left-1 w-2.5 h-2.5 bg-yellow-400 rotate-45 border border-black/20"></div>
-                                        <span className="absolute -top-4 left-1 text-[7px] text-yellow-400 font-bold whitespace-nowrap bg-black/90 px-1 border border-yellow-400/30 rounded">CORTE: {activeSubject.lastCallCutoff}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
-                        {questions[currentIndex] ? (
-                            <div className="max-w-4xl mx-auto">
-                                <div className="flex items-center gap-2 mb-2"><div className="bg-slate-800 text-blue-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-700">{questions[currentIndex].topic}</div><div className="bg-indigo-900/40 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded uppercase border border-indigo-700">{questions[currentIndex].origin}</div></div>
-                                <h2 className="text-lg md:text-xl font-bold text-white mb-6 leading-snug">{questions[currentIndex].question}</h2>
-                                <div className="grid grid-cols-1 gap-3">
-                                    {questions[currentIndex].options?.slice(0, activeSubject.optionsCount).map((opt, idx) => {
-                                        let btnClass = "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300";
-                                        const isAns = answers[currentIndex] === idx;
-                                        if (answers[currentIndex] !== undefined) { if (idx === questions[currentIndex].correct) btnClass = "bg-green-900/40 border-green-500 text-green-200"; else if (isAns) btnClass = "bg-red-900/40 border-red-500 text-red-200"; else btnClass = "opacity-50"; }
-                                        return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
-                                    })}
-                                </div>
-                                {answers[currentIndex] !== undefined && answers[currentIndex] !== questions[currentIndex].correct && (
-                                    <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm">
-                                        <div className="mb-3">{questions[currentIndex].explanation}</div>
-                                        <button onClick={handleDeepDive} disabled={loadingDeepDive} className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all w-full sm:w-auto justify-center border border-red-400">{loadingDeepDive ? <Icons.Loader size={14}/> : <Icons.BrainCircuit size={14}/>} AMPLIAR CONOCIMIENTO (IA)</button>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full py-20 animate-pulse"><Icons.Loader size={48} className="text-blue-500 mb-4"/><div className="text-xl font-bold text-white text-center uppercase">Generando preguntas...</div></div>
-                        )}
-                    </div>
-
-                    <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                         <div className="flex gap-2"><button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700">Omitir</button><label className="flex items-center gap-2 cursor-pointer bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 hidden sm:flex"><input type="checkbox" checked={autoNext} onChange={e => updateState({ autoNext: e.target.checked })} className="w-4 h-4 accent-blue-500" /><span className="text-xs text-slate-300 font-bold">Auto</span></label></div>
-                         <div className="flex gap-2"><button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white"><Icons.ArrowLeft size={20}/></button><button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button></div>
-                    </div>
-
-                    <Modal isOpen={showRestartConfirm} title="¿REINICIAR?" message="Se perderá el progreso." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={executeRestart} />
-                    <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Seguro?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
-                    {showDeepDive && (<div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in"><div className="bg-[#1a1a1a] border border-slate-700 rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl relative"><div className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#1a1a1a] rounded-t-2xl shrink-0"><h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.BrainCircuit size={24} className="text-purple-500"/> Ampliación de Conocimiento</h3><button onClick={() => setShowDeepDive(false)} className="text-slate-400 hover:text-white p-2 rounded hover:bg-slate-800"><Icons.XCircle size={24}/></button></div><div className="flex-1 overflow-y-auto custom-scrollbar p-8"><div className="prose prose-invert max-w-none text-slate-200 text-xl leading-relaxed whitespace-pre-wrap font-medium">{loadingDeepDive ? <div className="flex flex-col items-center py-10"><Icons.Loader size={48} className="text-purple-500 animate-spin"/><p className="text-purple-300 font-bold mt-4">Analizando concepto...</p></div> : deepDiveContent}</div></div></div></div>)}
-                    {showGrid && <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => updateState({ showGrid: false })}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white">Mapa</h3><button onClick={() => updateState({ showGrid: false })} className="text-slate-400"><Icons.XCircle/></button></div><div className="flex-1 overflow-y-auto grid grid-cols-6 sm:grid-cols-10 gap-2">{Array.from({length: activeSubject.qCount}).map((_, i) => { let bg = "bg-slate-800 text-slate-500 border-slate-700"; const ans = answers[i]; if (i < questions.length && ans !== undefined) { if (ans === -1) bg = "bg-blue-900/60 text-blue-400 border-blue-500"; else if (ans === questions[i].correct) bg = "bg-green-900/60 text-green-400 border-green-500"; else bg = "bg-red-900/60 text-red-400 border-red-500"; } else if (i >= questions.length) { bg = "opacity-30 border-dashed border-slate-800"; } return <button key={i} onClick={() => {if(i<questions.length){updateState({ currentIndex: i, showGrid: false });}}} className={`aspect-square rounded border font-bold text-sm flex items-center justify-center transition-all ${bg} ${i===currentIndex?'ring-2 ring-white scale-110 z-10':''}`}>{i + 1}</button> })}</div></div></div>}
+                <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-3 flex justify-between items-center z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+                     <button onClick={() => handleAnswer(-1)} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold uppercase border border-slate-700">Omitir</button>
+                     <div className="flex gap-2"><button onClick={() => updateState({ currentIndex: Math.max(0, currentIndex - 1) })} className="px-5 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-white"><Icons.ArrowLeft size={20}/></button><button onClick={() => updateState({ currentIndex: Math.min(questions.length - 1, currentIndex + 1) })} className="px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors shadow-lg"><Icons.ArrowRight size={20}/></button></div>
                 </div>
-            );
-          }
 
-          return null; 
-      };
-
-   
+                <Modal isOpen={showRestartConfirm} title="¿REINICIAR?" message="Se perderá el progreso." type="danger" onClose={() => setShowRestartConfirm(false)} onConfirm={executeRestart} />
+                <Modal isOpen={showFinishConfirm} title="¿TERMINAR?" message="¿Seguro?" type="default" onClose={() => setShowFinishConfirm(false)} onConfirm={executeFinish} />
+            </div>
+        );
+    }
+    return null; 
+};
     
 
 

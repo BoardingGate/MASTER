@@ -887,8 +887,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
       };
 
 
-
-    const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+  const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
@@ -931,7 +930,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           useEffect(() => {
               let timer;
               if (status === 'active' && timeLeft > 0) { 
-                  timer = setInterval(() => { if (!isFetchingRef.current) { setSession(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 })); } }, 1000); 
+                  timer = setInterval(() => { if (!isFetchingRef.current) { updateState({ timeLeft: timeLeft - 1 }); } }, 1000); 
               } else if (timeLeft === 0 && status === 'active') { executeFinish(); }
               return () => clearInterval(timer);
           }, [status, timeLeft]);
@@ -1098,27 +1097,26 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
             const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(paceAbs/60).toString().padStart(2,'0')}:${Math.floor(paceAbs%60).toString().padStart(2,'0')}`;
             const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
 
-            // LOGICA DE PUNTUACIÓN SEGÚN INSTRUCCIONES
-            const pointsExamWeighted = stats.points * (activeSubject.examWeight || 0.90);
-            const meritPoints = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
-            const finalScoreCombined = pointsExamWeighted + meritPoints;
-            
-            // LOGICA DE ESCALA DE LA BARRA (SOLICITADO)
-            // La barra representa: Max Examen Ponderado + Max Meritos
-            const maxRawExamPoints = activeSubject.qCount * activeSubject.pointsHit;
-            const maxWeightedExamPoints = maxRawExamPoints * (activeSubject.examWeight || 0.90);
-            const maxPossibleMerits = (10 * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
-            const totalBarRange = maxWeightedExamPoints + maxPossibleMerits;
+            // CALCULOS DE PUNTUACIÓN COMBINADA
+            const examWeightedResult = stats.points * (activeSubject.examWeight || 0.90);
+            const currentMeritPoints = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
+            const finalScoreCombinedResult = examWeightedResult + currentMeritPoints;
 
-            // Porcentajes de posición
-            const separatorPosPct = (maxWeightedExamPoints / totalBarRange) * 100;
-            const currentScorePct = (finalScoreCombined / totalBarRange) * 100;
-            const cutoffPosPct = (activeSubject.lastCallCutoff / totalBarRange) * 100;
+            // LOGICA DE ESCALA DE LA BARRA (MÁXIMO TOTAL POSIBLE)
+            const maxRawExamPointsVal = activeSubject.qCount * activeSubject.pointsHit;
+            const maxWeightedExamPointsVal = maxRawExamPointsVal * (activeSubject.examWeight || 0.90);
+            const maxPossibleMeritsVal = (10 * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
+            const totalBarRangeVal = maxWeightedExamPointsVal + maxPossibleMeritsVal;
 
-            const qTotal = activeSubject.qCount || 1;
-            const hitPct = ((stats.hits / qTotal) * 100).toFixed(1);
-            const missPct = ((stats.misses / qTotal) * 100).toFixed(1);
-            const skipPct = ((stats.skips / qTotal) * 100).toFixed(1);
+            // Porcentajes de posición corregidos
+            const separatorPosPctVal = (maxWeightedExamPointsVal / totalBarRangeVal) * 100;
+            const currentScorePctVal = (finalScoreCombinedResult / totalBarRangeVal) * 100;
+            const cutoffIndicatorPctVal = ((activeSubject.lastCallCutoff || 0) / totalBarRangeVal) * 100;
+
+            const qCountTotalNum = activeSubject.qCount || 1;
+            const hitPctVal = ((stats.hits / qCountTotalNum) * 100).toFixed(1);
+            const missPctVal = ((stats.misses / qCountTotalNum) * 100).toFixed(1);
+            const skipPctVal = ((stats.skips / qCountTotalNum) * 100).toFixed(1);
 
             return (
                 <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
@@ -1132,6 +1130,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                             </div>
                         </div>
 
+                        {/* TARJETONES PRINCIPALES */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 items-stretch">
                             <div className="bg-indigo-900/40 border-2 border-indigo-500/50 rounded-xl p-3 flex flex-col items-center justify-center">
                                 <div className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mb-1">Netas (aciertos-fallos)</div>
@@ -1144,45 +1143,45 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                             <div className="col-span-1 md:col-span-2 bg-green-900/20 border-2 border-green-500/40 rounded-xl p-3 flex items-center justify-between">
                                 <div className="flex flex-col">
                                     <div className="text-[9px] text-green-500 uppercase font-bold tracking-widest mb-1">Nota Final (Corte Combinado)</div>
-                                    <div className="text-3xl font-display font-bold text-white leading-none">{finalScoreCombined.toFixed(2)}</div>
+                                    <div className="text-3xl font-display font-bold text-white leading-none">{finalScoreCombinedResult.toFixed(2)}</div>
                                 </div>
                                 <div className="text-right border-l border-green-500/30 pl-4">
-                                    <div className="text-[8px] text-slate-400 mb-0.5">Examen ({(activeSubject.examWeight*100).toFixed(0)}%): <span className="text-white font-bold">{pointsExamWeighted.toFixed(2)}</span></div>
-                                    <div className="text-[8px] text-slate-400">Méritos: <span className="text-white font-bold">{meritPoints.toFixed(2)}</span></div>
+                                    <div className="text-[8px] text-slate-400 mb-0.5">Examen ({(activeSubject.examWeight*100).toFixed(0)}%): <span className="text-white font-bold">{examWeightedResult.toFixed(2)}</span></div>
+                                    <div className="text-[8px] text-slate-400">Méritos: <span className="text-white font-bold">{currentMeritPoints.toFixed(2)}</span></div>
                                 </div>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-4 gap-2 mb-3 items-center">
-                            <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs text-green-400 font-bold">{stats.hits} <span className="ml-1 font-bold">[{hitPct}%]</span></div></div>
-                            <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs text-red-400 font-bold">{stats.misses} <span className="ml-1 font-bold">[{missPct}%]</span></div></div>
-                            <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs text-slate-300 font-bold">{stats.skips} <span className="ml-1 font-bold">[{skipPct}%]</span></div></div>
+                            <div className="bg-green-900/20 border border-green-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-green-500 uppercase font-bold">Aciertos</div><div className="text-xs text-green-400 font-bold">{stats.hits} <span className="ml-1 font-bold">[{hitPctVal}%]</span></div></div>
+                            <div className="bg-red-900/20 border border-red-900/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-red-500 uppercase font-bold">Fallos</div><div className="text-xs text-red-400 font-bold">{stats.misses} <span className="ml-1 font-bold">[{missPctVal}%]</span></div></div>
+                            <div className="bg-slate-800/50 border border-slate-700 rounded px-1 py-1 text-center"><div className="text-[8px] text-slate-400 uppercase font-bold">Omitidas</div><div className="text-xs text-slate-300 font-bold">{stats.skips} <span className="ml-1 font-bold">[{skipPctVal}%]</span></div></div>
                             <div className="bg-purple-900/20 border border-purple-500/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte Ex.</div><div className="text-xs font-bold text-white">{activeSubject.lastCallCutoff || 0}</div></div>
                         </div>
 
-                        {/* BARRA TÉCNICA CORREGIDA */}
+                        {/* BARRA TÉCNICA CON TODOS LOS INDICADORES */}
                         <div className="relative pt-1 pb-4 px-1">
                             <div className="relative h-4 bg-slate-800/50 rounded-full overflow-hidden border border-slate-700">
-                                {/* Ticks de graduación de 20 en 20 puntos */}
+                                {/* Graduación de 20 en 20 */}
                                 <div className="absolute inset-0 flex pointer-events-none">
-                                    {Array.from({ length: Math.floor(totalBarRange / 20) + 1 }).map((_, i) => (
-                                        <div key={i} className="absolute h-full border-l border-white/5" style={{ left: `${(i * 20 / totalBarRange) * 100}%` }}>
+                                    {Array.from({ length: Math.floor(totalBarRangeVal / 20) + 1 }).map((_, i) => (
+                                        <div key={i} className="absolute h-full border-l border-white/5" style={{ left: `${(i * 20 / totalBarRangeVal) * 100}%` }}>
                                             {i % 2 === 0 && i > 0 && <span className="absolute -bottom-4 -left-2 text-[6px] text-slate-600 font-bold">{i * 20}</span>}
                                         </div>
                                     ))}
                                 </div>
                                 
                                 {/* Separador Examen / Meritos */}
-                                <div className="absolute top-0 h-full w-px bg-white/20 z-10" style={{ left: `${separatorPosPct}%` }}>
-                                    <span className="absolute -top-3 left-0.5 text-[6px] text-slate-500 uppercase font-bold whitespace-nowrap">Fase Oposición | Fase Concurso</span>
+                                <div className="absolute top-0 h-full w-px bg-white/20 z-10" style={{ left: `${separatorPosPctVal}%` }}>
+                                    <span className="absolute -top-3 left-0.5 text-[6px] text-slate-500 uppercase font-bold whitespace-nowrap">Oposición | Concurso</span>
                                 </div>
 
-                                {/* Progreso de la Nota Lograda */}
-                                <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-green-500 to-green-400 transition-all duration-500" style={{ width: `${currentScorePct}%` }}></div>
+                                {/* Barra de Progreso Actual */}
+                                <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-green-500 to-green-400 transition-all duration-500" style={{ width: `${currentScorePctVal}%` }}></div>
                                 
-                                {/* Marcador Amarillo (Nota de Corte de Convocatoria) */}
+                                {/* Indicador Amarillo de Corte de Última Convocatoria */}
                                 {activeSubject.lastCallCutoff > 0 && (
-                                    <div className="absolute top-0 h-full w-0.5 bg-yellow-400 z-20 shadow-[0_0_10px_rgba(250,204,21,0.8)]" style={{ left: `${cutoffIndicatorPct}%` }}>
+                                    <div className="absolute top-0 h-full w-0.5 bg-yellow-400 z-20 shadow-[0_0_10px_rgba(250,204,21,0.8)]" style={{ left: `${cutoffIndicatorPctVal}%` }}>
                                         <div className="absolute -top-1 -left-1 w-2 h-2 bg-yellow-400 rotate-45"></div>
                                         <span className="absolute -top-3 left-1 text-[7px] text-yellow-400 font-bold whitespace-nowrap bg-black/80 px-1 rounded">CORTE: {activeSubject.lastCallCutoff}</span>
                                     </div>
@@ -1231,7 +1230,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           return null; 
       };
-       
+    
   
     
 

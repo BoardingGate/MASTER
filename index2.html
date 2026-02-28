@@ -116,6 +116,9 @@
           );
       };
 
+
+// EL MODELO DE GEMINI SE DEFINE EN CONST ASKGEMINI
+        
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const DB_VERSION = 6; 
@@ -297,16 +300,26 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           });
       };
 
-
-      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
+          // ESTADO AÑADIDO: Lista de modelos (Idéntico a Bolsa2)
+          const [availableModels, setAvailableModels] = usePersistentState('gemini_available_models', [
+              "gemini-3.1-pro-preview",
+              "gemini-3-pro-preview",
+              "gemini-3-flash-preview",
+              "gemini-2.5-pro",
+              "gemini-2.5-flash",
+              "gemini-2.5-flash-lite"
+          ]);
+          
           const [showKey, setShowKey] = useState(false);
           const [testStatus, setTestStatus] = useState(null); 
           const [errorDetail, setErrorDetail] = useState('');
           const [localLic, setLocalLic] = useState('');
           const [ioStatus, setIoStatus] = useState('idle');
 
+     
           const testConnection = async () => {
               if(!apiKey) return alert("Introduce una clave primero.");
               setTestStatus('loading'); setErrorDetail('');
@@ -337,6 +350,8 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
                           <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Gestiona tu conexión con Google Gemini</p></div>
                       </div>
+
+
                       <div className="space-y-6">
                           <div>
                               <label className="block text-sm font-bold text-slate-300 mb-2">Google Gemini API Key</label>
@@ -344,26 +359,58 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                                   <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black/50 border border-slate-600 rounded-xl p-4 pr-12 text-white focus:border-purple-500 focus:outline-none font-mono"/>
                                   <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">{showKey ? <Icons.EyeOff size={20}/> : <Icons.Eye size={20}/>}</button>
                               </div>
-                              <div className="flex gap-4 items-end">
-                                  <div className="flex-1">
-                                      <label className="block text-xs font-bold text-slate-400 mb-1">Modelo de IA</label>
-                                      <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm focus:outline-none">
-                                          <option value="gemini-3-flash-preview">Gemini 3 Flash (Recomendado)</option>
-                                          <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
-                                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                      </select>
-                                  </div>
-                                  <button onClick={testConnection} className={`h-[46px] px-6 rounded-xl border font-bold text-sm ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>{testStatus === 'loading' ? <Icons.Loader/> : 'PROBAR CONEXIÓN'}</button>
+                              <div className="flex justify-end gap-3 items-center">
+                                  <button onClick={testConnection} className={`h-[40px] px-6 rounded-xl border font-bold text-sm flex items-center gap-2 ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>
+                                      {testStatus === 'loading' ? <Icons.Loader/> : testStatus === 'success' ? <Icons.CheckCircle size={18}/> : 'PROBAR CONEXIÓN'}
+                                  </button>
                               </div>
                               {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
                               
-                              <div className="mt-6 p-6 bg-[#1e293b] border border-[#334155] rounded-xl relative overflow-hidden">
-                                  <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
-                                      <Icons.HelpCircle size={20} /> Gestión de la API Key (Gratis vs Pago)
-                                  </h4>
+                              <div className="mb-6 border-t border-slate-700 pt-6">
+                                  <div className="flex justify-between items-center mb-2">
+                                       <label className="text-sm font-bold text-slate-300 uppercase tracking-wide">Modelo IA Activo</label>
+                                       <span className="text-[10px] text-slate-500 font-mono">{model}</span>
+                                  </div>
+                                  <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm mb-4 font-mono shadow-inner focus:ring-1 focus:ring-blue-500">
+                                      {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                  </select>
+                                  
+                                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                       <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase flex items-center gap-2"><Icons.Settings size={12}/> Gestión de Modelos Personalizados</label>
+                                       <div className="flex gap-2 mb-3">
+                                           <input type="text" id="newModelInput" placeholder="ID del Modelo (Ej: gemini-1.5-pro)" className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-blue-500"/>
+                                           <button onClick={() => {
+                                               const input = document.getElementById('newModelInput');
+                                               const val = input.value.trim();
+                                               if(val && !availableModels.includes(val)) {
+                                                   setAvailableModels([...availableModels, val]);
+                                                   setModel(val); // Seleccionar el nuevo automáticamente
+                                                   input.value = '';
+                                               }
+                                           }} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors shadow-lg">Añadir</button>
+                                       </div>
+                                       
+                                       <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
+                                           {availableModels.map(m => (
+                                               <div key={m} className={`group flex items-center gap-2 px-2 py-1.5 rounded border text-[10px] font-mono transition-all ${model === m ? 'bg-blue-900/30 border-blue-500 text-blue-300 shadow-md' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}>
+                                                   <span className="truncate max-w-[150px]" title={m}>{m}</span>
+                                                   {availableModels.length > 1 && (
+                                                       <button onClick={(e) => {
+                                                           e.stopPropagation(); // Evitar selects accidentales
+                                                           const newList = availableModels.filter(x => x !== m);
+                                                           setAvailableModels(newList);
+                                                           if(model === m) setModel(newList[0] || availableModels[0]);
+                                                       }} className="text-red-500 hover:text-red-300 font-bold px-1 rounded hover:bg-red-900/20 transition-colors" title="Borrar modelo">×</button>
+                                                   )}
+                                               </div>
+                                           ))}
+                                       </div>
+                                  </div>
+                              </div>
 
+                              <div className="mt-6 p-6 bg-[#1e293b] border border-[#334155] rounded-xl relative overflow-hidden">
+                                  <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><Icons.HelpCircle size={20} /> Gestión de la API Key (Gratis vs Pago)</h4>
+                                  
                                   <div className="mb-6 border-b border-slate-700 pb-6">
                                       <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                                           <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded text-[10px] uppercase border border-green-500/30">Opción Gratuita</span>
@@ -371,41 +418,62 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
                                       </h5>
                                       <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 mb-4 leading-relaxed">
                                           <li>Accede a <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-400 hover:underline font-bold">Google AI Studio</a>.</li>
-                                          <li>Haz clic en <strong>"Get API key"</strong> (arriba izquierda) y luego en <strong>"Create API key in new project"</strong>.</li>
-                                          <li>Copia la clave y pégala arriba.</li>
+                                          <li>Haz clic en el icono de las tres rallas del menú superior izquierdo <strong>"Get API key"</strong> luego abajo en <strong>"GET API Key, luego en CREAR CLAVE de API, se abre una ventana, pulsa CREAR CLAVE. Esto creará una clave y saldrá en la pantalla anterior, pulsas en la primera columna..."</strong>.</li>
+                                          <li>y Copia la clave y pégala arriba.</li>
                                       </ol>
-                                      <p className="text-[10px] text-slate-400 bg-slate-900/50 p-3 rounded border border-slate-700">
-                                          <strong>Límites actuales:</strong> 15 peticiones/minuto (RPM) y 1.500/día. Si la IA falla o tarda mucho, es probable que hayas superado este límite temporalmente.
-                                      </p>
+                                      <p className="text-[10px] text-slate-400 bg-slate-900/50 p-3 rounded border border-slate-700"><strong>Límites actuales:</strong> 15 peticiones/minuto (RPM) y 1.500/día. Si la IA falla o tarda mucho, es probable que hayas superado este límite temporalmente.</p>
                                   </div>
-
+                                  
                                   <div>
                                       <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                          <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-[10px] uppercase border border-blue-500/30">Opción Ilimitada (Pay-as-you-go)</span>
-                                          <span className="text-slate-400 text-xs font-normal">Para uso intensivo</span>
+                                          <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-[10px] uppercase border border-blue-500/30">Opción Ilimitada (Pago por uso)</span>
+                                          <span className="text-slate-400 text-xs font-normal">Para evitar esperas y generar exámenes largos</span>
                                       </h5>
-                                      <p className="text-xs text-slate-300 mb-3 leading-relaxed">
-                                          Si realizas muchos simulacros seguidos o usas el rebalanceo inteligente frecuentemente, te conviene activar la facturación para eliminar esperas.
-                                      </p>
-                                      <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 mb-6 leading-relaxed">
-                                          <li>Ve a la <a href="https://console.cloud.google.com/billing" target="_blank" className="text-blue-400 hover:underline font-bold">Consola de Google Cloud Billing</a>.</li>
-                                          <li>Selecciona el <strong>mismo proyecto</strong> que se creó automáticamente en AI Studio (suele llamarse "Generative Language Client").</li>
-                                          <li>Haz clic en <strong>"Vincular una cuenta de facturación"</strong> e introduce tu tarjeta.</li>
-                                          <li><strong>Coste:</strong> Es extremadamente barato (aprox. $0.35 por millón de tokens). Un simulacro completo consume centavos.</li>
-                                      </ol>
+                                      <p className="text-xs text-slate-300 mb-3 leading-relaxed">Asociar una tarjeta elimina el límite de velocidad. El coste es de unos <strong>0,35€ por cada millón de palabras</strong> (céntimos al mes para un opositor). Recuerda estar logeado en GOOGLE con la misma cuenta que has usado en Google AI Studio. Sigue estos pasos:</p>
                                       
-                                      <div className="flex gap-3">
-                                          <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex-1 text-center py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-slate-600">
-                                              <Icons.ExternalLink size={14}/> Obtener Key (AI Studio)
+                                      <div className="space-y-4">
+                                          {/* PASO 1: GOOGLE CLOUD */}
+                                          <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                              <h6 className="text-[10px] font-black text-blue-400 uppercase mb-2">Paso 1: Crear la cuenta de facturación</h6>
+                                              <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
+                                                  <li>PRIMERO CREA LA API GRATUITA SEGÚN LO EXPUESTO EN EL PASO ANTERIOR "OPCION GRATUITA". Luego, Pulsa en esta pantalla abajo en <strong>"1. Crear Facturación (Cloud)"</strong>.</li>
+                                                  <li>En la pantalla que aparece, pulsa el botón <strong>"+ CREAR CUENTA"</strong> (arriba a la izquierda).</li>
+                                                  <li><strong>Configuración:</strong> Elige tu país, tu divisa (Euro) y rellena los datos de tu tarjeta bancaria. Pulsa en "Iniciar mi prueba gratuita" o "Confirmar".</li>
+                                              </ol>
+                                          </div>
+                                  
+                                          {/* PASO 2: VINCULAR EN AI STUDIO */}
+                                          <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                              <h6 className="text-[10px] font-black text-purple-400 uppercase mb-2">Paso 2: Activar el pago en tu API Key</h6>
+                                              <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
+                                                  <li>Pulsa en esta pantalla abajo en <strong>"2. Vincular Clave (AI Studio)"</strong>.</li>
+                                                  <li>Saldrá un listado con las claves creadas (si no creaste más que una, solo la creada) en esa línea al final debajo de la columna QUOTE TIER habrá un link en azul con ACTIVAR LA FACTURACIÓN.</li>
+                                                  <li>Haz clic ahí.</li>
+                                                  <li>Selecciona la cuenta de facturación que creaste en el Paso 1 y confirma.</li>
+                                              </ol>
+                                          </div>
+                                  
+                                          {/* PASO 3: COPIAR CLAVE */}
+                                          <div className="bg-slate-950 p-2 rounded border border-blue-500/30 text-[10px] text-slate-400 italic">
+                                              * Por último, si no lo habías hecho antes, copia la Clave API de esa misma línea (pulsando en el dato azul de la primera columna CLAVE y pégala en el campo superior de esta pantalla en "Google Gemini API Key" en esta aplicación.
+                                          </div>
+                                      </div>
+                                      
+                                      <div className="flex gap-3 mt-6">
+                                          <a href="https://console.cloud.google.com/billing" target="_blank" className="flex-1 text-center py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-blue-500 shadow-lg">
+                                              <Icons.ExternalLink size={14}/> 1. Crear Facturación (Cloud)
                                           </a>
-                                          <a href="https://console.cloud.google.com/billing" target="_blank" className="flex-1 text-center py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-blue-500">
-                                              <Icons.ExternalLink size={14}/> Activar Facturación (Cloud)
+                                          <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex-1 text-center py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-slate-600">
+                                              <Icons.ExternalLink size={14}/> 2. Vincular Clave (AI Studio)
                                           </a>
                                       </div>
                                   </div>
                               </div>
                           </div>
-                      </div>
+                      </div>                      
+
+                      
+                      
                   </div>
 
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">

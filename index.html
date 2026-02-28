@@ -1166,18 +1166,26 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
             const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(paceAbs/60).toString().padStart(2,'0')}:${Math.floor(paceAbs%60).toString().padStart(2,'0')}`;
             const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
 
-            // LOGICA MATEMÁTICA SEGÚN REQUERIMIENTOS
-            const examContribPct = (activeSubject.examWeight || 90) / 100;
+
+            // LOGICA MATEMÁTICA SEGÚN REQUERIMIENTOS (Asegurando formato numérico)
+            const safeExamWeight = Number(activeSubject.examWeight) || 90;
+            const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
+            const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
+            const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
+            const safeCutoff = Number(activeSubject.lastCallCutoff) || 0;
+
+            const examContribPct = safeExamWeight / 100;
             const puntosExamenAportados = stats.points * examContribPct;
-            const puntosMeritos = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
+            const puntosMeritos = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
             const notaFinalTotal = puntosExamenAportados + puntosMeritos;
             
             // ESCALA BARRA
             const maxPointsPossible = activeSubject.qCount * activeSubject.pointsHit;
             const posTechoExamenPct = (examContribPct * 100); 
-            const posCorteLilaPct = ((activeSubject.lastCallCutoff || 0) / maxPointsPossible) * 100;
+            const posCorteLilaPct = (safeCutoff / maxPointsPossible) * 100;
             const barRellenoPct = Math.min(100, (notaFinalTotal / maxPointsPossible) * 100);
 
+          
             // MINI STATS CON [%] EN NEGRITA
             const totalQs = activeSubject.qCount || 1;
             const hPct = ((stats.hits / totalQs) * 100).toFixed(1);
@@ -1395,13 +1403,18 @@ const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual,
 
         const total = statsResults.length;
         if (viewMode === 'global') {
-            const examWeightFactor = (activeSubject.examWeight || 90) / 100;
-            const meritPoints = ((activeSubject.degreeGrade || 5) * (activeSubject.degreeWeight || 6)) + (activeSubject.extraPoints || 0);
+            const safeExamWeight = Number(activeSubject.examWeight) || 90;
+            const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
+            const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
+            const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
+
+            const examWeightFactor = safeExamWeight / 100;
+            const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
 
             const avgRawScore = statsResults.reduce((acc, r) => acc + (r.score || 0), 0) / total;
             const avgWeightedScore = avgRawScore * examWeightFactor;
             const avgFinalScore = avgWeightedScore + meritPoints;
-
+       
             const avgPct = statsResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
             const avgHits = statsResults.reduce((acc, r) => acc + r.hits, 0) / total;
             const avgMisses = statsResults.reduce((acc, r) => acc + r.misses, 0) / total;
@@ -1588,14 +1601,20 @@ const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual,
                             {viewResults.map((r, i) => { 
                                 let hits, misses, skips, total, netas, pctDisplay, timeStr, progressDisplay, pointsCell;
                                 const isReinf = r.isReinforcement;
-                                
+
                                 if (viewMode === 'global') {
                                     hits = r.hits; misses = r.misses; skips = r.skips; total = r.total; netas = hits - misses;
+                                    const safeExamWeight = Number(activeSubject.examWeight) || 90;
+                                    const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
+                                    const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
+                                    const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
+
                                     const rawPoints = r.score;
-                                    const weightedPoints = rawPoints * ((activeSubject.examWeight || 90)/100);
-                                    const meritPoints = ((activeSubject.degreeGrade||5)*(activeSubject.degreeWeight||6)) + (activeSubject.extraPoints||0);
+                                    const weightedPoints = rawPoints * (safeExamWeight / 100);
+                                    const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
                                     const finalScore = weightedPoints + meritPoints;
-                                    
+                                
+                                 
                                     pointsCell = isReinf ? (
                                         <span className="text-[10px] text-yellow-500 font-bold bg-yellow-900/20 px-2 py-1 rounded border border-yellow-500/30">REFUERZO</span>
                                     ) : (

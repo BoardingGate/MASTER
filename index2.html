@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -20,7 +19,6 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
 
-    
     <style>
       html, body { margin: 0; padding: 0; width: 100%; height: 100dvh; overflow: hidden; background-color: #0a0a0a; font-family: 'Inter', sans-serif; color: #e5e5e5; }
       #root { height: 100%; width: 100%; display: flex; flex-direction: column; }
@@ -88,7 +86,8 @@
         Award: (p) => <IconBase {...p}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></IconBase>,
         ChevronDown: (p) => <IconBase {...p}><polyline points="6 9 12 15 18 9"/></IconBase>,
         ChevronUp: (p) => <IconBase {...p}><polyline points="18 15 12 9 6 15"/></IconBase>,
-        Calculator: (p) => <IconBase {...p}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="8" y1="18" x2="8" y2="18"/></IconBase>
+        Calculator: (p) => <IconBase {...p}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="8" y1="18" x2="8" y2="18"/></IconBase>,
+        Copy: (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></IconBase>
       };
 
       const Modal = ({ isOpen, title, message, type, onClose, onConfirm }) => {
@@ -116,9 +115,6 @@
           );
       };
 
-
-// EL MODELO DE GEMINI SE DEFINE EN CONST ASKGEMINI
-        
       const DB_NAME = 'BoardingGateDB';
       const DB_STORE = 'pdfs';
       const DB_VERSION = 6; 
@@ -176,29 +172,127 @@
         return [state, setState];
       };
 
-      const askGemini = async (apiKey, prompt) => {
-          const savedModel = window.localStorage.getItem('gemini_model');
-          const MODEL = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
-          const safetySettings = [
-              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-          ];
-          try {
-              const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
+      const cleanPromptFromHtmlArtifacts = (text) => {
+          if (!text) return "";
+          let cleaned = text;
+          
+          cleaned = cleaned.replace(/SISTEMA:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/MODELO\s*IA:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/Modelo:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/FECHA(\s*ACTUAL)?:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/Generado:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/EMISIÓN:\s*[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROL:\s*ANALISTA\s*SENIOR\s*BURSÁTIL\s*DE\s*WALL\s*STREET[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROLE:\s*Data\s*Extraction\s*Expert[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROLE:\s*Hedge\s*Fund\s*Manager[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROL:\s*GESTOR\s*DE\s*RIESGOS[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROL:\s*ANALISTA\s*SENIOR\s*DE\s*BOLSA[^\n]*/gi, "");
+          cleaned = cleaned.replace(/ROL:\s*Asesor\s*Fiscal[^\n]*/gi, "");
+          cleaned = cleaned.replace(/INSTRUCCIÓN\s*OBLIGATORIA:\s*USA\s*TU\s*HERRAMIENTA[^\n]*/gi, "");
+          
+          cleaned = cleaned.replace(/código HTML limpio/gi, "Markdown estándar");
+          cleaned = cleaned.replace(/formato HTML limpio/gi, "formato Markdown");
+          cleaned = cleaned.replace(/código HTML/gi, "Markdown");
+          cleaned = cleaned.replace(/en formato HTML/gi, "en formato Markdown");
+          cleaned = cleaned.replace(/tabla HTML/gi, "tabla Markdown");
+          cleaned = cleaned.replace(/tablas HTML/gi, "tablas Markdown");
+          cleaned = cleaned.replace(/etiqueta HTML/gi, "sintaxis Markdown");
+          
+          cleaned = cleaned.replace(/<h3>/gi, "### ");
+          cleaned = cleaned.replace(/<\/h3>/gi, "\n");
+          cleaned = cleaned.replace(/<h4>/gi, "#### ");
+          cleaned = cleaned.replace(/<\/h4>/gi, "\n");
+          cleaned = cleaned.replace(/<li>/gi, "- ");
+          cleaned = cleaned.replace(/<\/li>/gi, "\n");
+          cleaned = cleaned.replace(/<ul>/gi, "");
+          cleaned = cleaned.replace(/<\/ul>/gi, "");
+          cleaned = cleaned.replace(/<p>/gi, "");
+          cleaned = cleaned.replace(/<\/p>/gi, "\n");
+          cleaned = cleaned.replace(/<strong>/gi, "**");
+          cleaned = cleaned.replace(/<\/strong>/gi, "**");
+          cleaned = cleaned.replace(/<b>/gi, "**");
+          cleaned = cleaned.replace(/<\/b>/gi, "**");
+          cleaned = cleaned.replace(/<br\s*\/?>/gi, "\n");
+          cleaned = cleaned.replace(/<table[^>]*>/gi, "\n[Tabla Markdown]\n");
+          cleaned = cleaned.replace(/<\/table>/gi, "\n");
+          cleaned = cleaned.replace(/<tr[^>]*>/gi, "");
+          cleaned = cleaned.replace(/<\/tr>/gi, "\n");
+          cleaned = cleaned.replace(/<th[^>]*>/gi, "| ");
+          cleaned = cleaned.replace(/<\/th>/gi, " ");
+          cleaned = cleaned.replace(/<td[^>]*>/gi, "| ");
+          cleaned = cleaned.replace(/<\/td>/gi, " ");
+          
+          cleaned = cleaned.replace(/<[^>]+>/g, "");
+          cleaned = cleaned.trim().replace(/\n{3,}/g, "\n\n");
+          
+          return "Actúa como un tribunal de oposición experto.\n\n" + cleaned;
+      };
+
+      const askAI = async (geminiKey, secondaryApiKey, prompt, model, useSearch = false) => {
+          if (typeof window !== 'undefined') {
+              window.lastBgPrompt = cleanPromptFromHtmlArtifacts(prompt);
+          }
+
+          if (model && model.toUpperCase().includes("USAR MODELO EXTERNO")) {
+              if (typeof window !== 'undefined' && window.openPromptModal) {
+                  window.openPromptModal();
+              }
+              throw new Error("BYPASS_MODEL");
+          }
+
+          const rawModel = model || "gemini-3-flash-preview";
+          let targetModel = rawModel.split('|')[0].replace(/\s+/g, '');
+
+          let isGeminiDirect = targetModel.startsWith("gemini") && !targetModel.includes("/");
+
+          if (isGeminiDirect && (!geminiKey || geminiKey.trim() === '')) {
+              isGeminiDirect = false; 
+              targetModel = `google/${targetModel}`; 
+          }
+
+          if (isGeminiDirect) {
+              if (!geminiKey) throw new Error("Falta API Key de Gemini");
+              const requestBody = {
+                  contents: [{ parts: [{ text: prompt }] }]
+              };
+              if (useSearch) {
+                  requestBody.tools = [{ google_search: {} }];
+              }
+              const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${geminiKey}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestBody)
+              });
+              const data = await response.json();
+              if (data.error) throw new Error(data.error.message);
+              return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              
+          } else {
+              if (!secondaryApiKey) throw new Error("Falta API Key. Debes configurar la de Gemini o la de OpenRouter en Ajustes.");
+              const response = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
+                  method: 'POST',
+                  headers: { 
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${secondaryApiKey}`,
+                      'HTTP-Referer': window.location.href, 
+                      'X-Title': 'BoardingGate Terminal' 
+                  },
                   body: JSON.stringify({ 
-                      contents: [{ parts: [{ text: prompt }] }], 
-                      tools: [{ google_search: {} }],
-                      safetySettings: safetySettings 
+                      model: targetModel, 
+                      messages: [{ role: "user", content: prompt }]
                   })
               });
-              if (!response.ok) throw new Error("API Error");
               const data = await response.json();
-              return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          } catch (e) { console.error(e); throw e; }
+              if (data.error) throw new Error(data.error.message);
+              return data.choices?.[0]?.message?.content || "";
+          }
+      };
+
+      const askGemini = async (geminiKey, prompt, useSearch = false) => {
+          const secondaryApiKey = JSON.parse(window.localStorage.getItem('openrouter_api_key') || '""');
+          const savedModel = window.localStorage.getItem('gemini_model');
+          const model = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
+          return await askAI(geminiKey, secondaryApiKey, prompt, model, useSearch);
       };
 
       const extractJSON = (text) => {
@@ -209,8 +303,7 @@
           return [];
       };
 
-
-const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
+      const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const optCount = subject.optionsCount || 4;
           const letters = Array.from({length: optCount}, (_, i) => String.fromCharCode(65+i));
           
@@ -234,7 +327,7 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           const prompt = `Actúa como tribunal experto. Materia: "${subject.name}". ${contextInstruction} Genera ${amount} preguntas difíciles. Responde SOLO JSON: [{"question": "...", "options": ["A...", "B...", "C...", "D..."], "correct": 0, "explanation": "...", "topic": "NOMBRE_TEMA_EXACTO"}]`;
           
           try {
-              const rawText = await askGemini(apiKey, prompt);
+              const rawText = await askGemini(apiKey, prompt, false);
               const parsed = extractJSON(rawText);
               
               return parsed.map((q) => {
@@ -261,9 +354,6 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           } catch (err) { throw err; }
       };
 
-
-
-
       const formatTime = (seconds) => {
           const h = Math.floor(seconds / 3600);
           const m = Math.floor((seconds % 3600) / 60);
@@ -274,7 +364,7 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
       const exportLiteBackup = async () => {
           try {
               const lsData = {};
-              const keysToKeep = [ 'boardinggate_subjects', 'boardinggate_history', 'boardinggate_active_sub', 'gemini_api_key', 'gemini_model', 'bg_app_rk_st', 'bg_app_tc_st', 'bg_is_registered'];
+              const keysToKeep = [ 'boardinggate_subjects', 'boardinggate_history', 'boardinggate_active_sub', 'gemini_api_key', 'openrouter_api_key', 'gemini_model', 'gemini_available_models', 'bg_app_rk_st', 'bg_app_tc_st', 'bg_is_registered'];
               keysToKeep.forEach(key => { const val = localStorage.getItem(key); if(val) lsData[key] = JSON.parse(val); });
               const backup = { type: 'lite_backup', version: 1, date: new Date().toISOString(), localStorage: lsData };
               const blob = new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"});
@@ -300,17 +390,21 @@ const fetchBatch = async (apiKey, subject, amount, offset, sourceConfig) => {
           });
       };
 
-const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
+          const [secondaryApiKey, setSecondaryApiKey] = usePersistentState('openrouter_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
-          // ESTADO AÑADIDO: Lista de modelos (Idéntico a Bolsa2)
           const [availableModels, setAvailableModels] = usePersistentState('gemini_available_models', [
-              "gemini-3.1-pro-preview",
-              "gemini-3-pro-preview",
-              "gemini-3-flash-preview",
-              "gemini-2.5-pro",
-              "gemini-2.5-flash",
-              "gemini-2.5-flash-lite"
+              "USAR MODELO EXTERNO | Generar y copiar prompt sin API",
+              "gemini-3-flash-preview | GEMINI",
+              "gemini-3-pro-preview | GEMINI",
+              "gemini-3.1-pro-preview | GEMINI",
+              "gemini-2.5-pro | GEMINI",
+              "gemini-2.5-flash | GEMINI",
+              "gemini-2.5-flash-lite | GEMINI",
+              "arcee-ai/trinity-large-preview:free | IA Gratuita",
+              "nvidia/nemotron-3-super-120b-a12b:free | IA Gratuita",
+              "openrouter/free | OPENROUTER usando ias Gratuitas"
           ]);
           
           const [showKey, setShowKey] = useState(false);
@@ -319,19 +413,212 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [localLic, setLocalLic] = useState('');
           const [ioStatus, setIoStatus] = useState('idle');
 
-     
           const testConnection = async () => {
-              if(!apiKey) return alert("Introduce una clave primero.");
+              if(!apiKey && !secondaryApiKey) return alert("Introduce una clave (Gemini o OpenRouter) primero.");
               setTestStatus('loading'); setErrorDetail('');
               try {
-                  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ contents: [{ parts: [{ text: "OK" }] }] })
+                  const response = await askAI(apiKey, secondaryApiKey, "Test conexión. Responde OK si me recibes.", model, false);
+                  if(response) { setTestStatus('success'); } 
+                  else { setTestStatus('error'); setErrorDetail("Respuesta vacía o error de red."); }
+              } catch(e) { 
+                  if (e.message === "BYPASS_MODEL") {
+                      setTestStatus('success');
+                  } else {
+                      setTestStatus('error'); 
+                      setErrorDetail(e.message); 
+                  }
+              }
+          };
+
+          const handleSortModels = () => {
+              setIoStatus('processing');
+              try {
+                  const sorted = [...availableModels].sort((a, b) => {
+                      const getProvider = (str) => {
+                          const rawId = str.split('|')[0].trim().toLowerCase();
+                          if (rawId.includes('/')) return rawId.split('/')[0];
+                          if (rawId.startsWith('gemini')) return 'google';
+                          if (rawId.startsWith('gpt')) return 'openai';
+                          if (rawId.startsWith('claude')) return 'anthropic';
+                          return 'z_otros';
+                      };
+                      const isFree = (str) => {
+                          const rawId = str.split('|')[0].trim().toLowerCase();
+                          return rawId.endsWith(':free') || str.toLowerCase().includes('gratuita') || str.toLowerCase().includes('free');
+                      };
+                      const provA = getProvider(a);
+                      const provB = getProvider(b);
+                      const freeA = isFree(a);
+                      const freeB = isFree(b);
+
+                      if (provA !== provB) return provA.localeCompare(provB);
+                      if (freeA !== freeB) return freeA ? 1 : -1;
+                      return a.localeCompare(b);
                   });
-                  if(response.ok) { setTestStatus('success'); } 
-                  else { const err = await response.json(); setTestStatus('error'); setErrorDetail(err.error ? `${err.error.code}: ${err.error.message}` : JSON.stringify(err)); }
-              } catch(e) { setTestStatus('error'); setErrorDetail(e.message); }
+                  setAvailableModels(sorted);
+              } catch (e) {
+                  console.error("Error ordenando modelos:", e);
+              } finally {
+                  setTimeout(() => setIoStatus('idle'), 500);
+              }
+          };
+
+          const handleSortByPrice = () => {
+              setIoStatus('processing');
+              try {
+                  const getModelStats = (str) => {
+                      let isFree = false;
+                      let isPaid = false;
+                      let cost = 0;
+                      let kValue = 0;
+
+                      const lowerStr = str.toLowerCase();
+                      if (lowerStr.includes('free') || lowerStr.includes('gratuita') || str.split('|')[0].trim().endsWith(':free')) {
+                          isFree = true;
+                      }
+                      if (str.includes('💎') || str.includes('In:$') || lowerStr.includes('pago')) {
+                          isPaid = true;
+                          const inMatch = str.match(/In:\$([\d.]+)/);
+                          const outMatch = str.match(/Out:\$([\d.]+)/);
+                          const inCost = inMatch ? parseFloat(inMatch[1]) : 0;
+                          const outCost = outMatch ? parseFloat(outMatch[1]) : 0;
+                          cost = inCost + outCost;
+                      }
+                      const kMatch = str.match(/\((\d+)k\)/i);
+                      if (kMatch) {
+                          kValue = parseInt(kMatch[1], 10);
+                      }
+                      let group = 2; 
+                      if (isPaid || cost > 0) group = 1;
+                      else if (isFree) group = 3;
+
+                      return { group, cost, kValue };
+                  };
+
+                  const sorted = [...availableModels].sort((a, b) => {
+                      const statsA = getModelStats(a);
+                      const statsB = getModelStats(b);
+                      if (statsA.group !== statsB.group) return statsA.group - statsB.group;
+                      if (statsA.group === 1 && statsB.cost !== statsA.cost) {
+                          return statsB.cost - statsA.cost;
+                      }
+                      if (statsB.kValue !== statsA.kValue) {
+                          return statsB.kValue - statsA.kValue;
+                      }
+                      return a.localeCompare(b);
+                  });
+                  setAvailableModels(sorted);
+              } catch (e) {
+                  console.error("Error ordenando modelos por precio:", e);
+              } finally {
+                  setTimeout(() => setIoStatus('idle'), 500);
+              }
+          };
+
+          const fetchDynamicModels = async (type) => {
+              try {
+                  setIoStatus('processing'); 
+                  const filterInput = document.getElementById('newModelInput');
+                  const filterTextRaw = filterInput ? filterInput.value.trim().toLowerCase() : '';
+                  const filterTextClean = filterTextRaw.replace(/[\s\-_/]/g, '');
+                  const existingIds = new Set(availableModels.map(am => am.split('|')[0].trim()));
+
+                  const res = await fetch('https://openrouter.ai/api/v1/models');
+                  const data = await res.json();
+                  let models = data.data;
+
+                  if (filterTextClean) {
+                      models = models.filter(m => {
+                          const cleanId = m.id.toLowerCase().replace(/[\s\-_/]/g, '');
+                          const cleanName = m.name.toLowerCase().replace(/[\s\-_/]/g, '');
+                          return cleanId.includes(filterTextClean) || cleanName.includes(filterTextClean);
+                      });
+                  } else {
+                      models = models.filter(m => 
+                          !m.id.includes('vision') && 
+                          !m.id.includes('moderation') && 
+                          !m.name.toLowerCase().includes('image') &&
+                          !m.name.toLowerCase().includes('beta')
+                      );
+                  }
+
+                  if (type === 'free') {
+                      models = models.filter(m => {
+                          const costP = m.pricing && m.pricing.prompt ? parseFloat(m.pricing.prompt) : 0;
+                          const costC = m.pricing && m.pricing.completion ? parseFloat(m.pricing.completion) : 0;
+                          return (costP === 0 && costC === 0) || m.id.endsWith(':free');
+                      });
+                      const getModelScore = (m) => {
+                          const match = m.id.toLowerCase().match(/(\d+)b/);
+                          let weight = match ? parseInt(match[1]) : 0;
+                          if (m.id.toLowerCase().includes('r1')) weight += 1000;
+                          return weight;
+                      };
+                      models.sort((a, b) => {
+                          const scoreA = getModelScore(a);
+                          const scoreB = getModelScore(b);
+                          if (scoreA !== scoreB) return scoreB - scoreA;
+                          return b.context_length - a.context_length;
+                      });
+                  } else {
+                      models = models.filter(m => {
+                          const costP = m.pricing && m.pricing.prompt ? parseFloat(m.pricing.prompt) : 0;
+                          return costP > 0 && !m.id.endsWith(':free');
+                      });
+                      if (!filterTextClean) {
+                          const budgetTerms = /(mini|lite|flash|haiku|nano|small|(?<!\d)[1-9]b|1[0-4]b)/i;
+                          models = models.filter(m => 
+                              !budgetTerms.test(m.id) && 
+                              !budgetTerms.test(m.name)
+                          );
+                      }
+                      models.sort((a, b) => b.context_length - a.context_length);
+                  }
+
+                  const selectedModels = [];
+                  const seenProviders = new Set();
+                  for (const m of models) {
+                      const provider = m.id.split('/')[0];
+                      if (!seenProviders.has(provider) && !existingIds.has(m.id)) {
+                          selectedModels.push(m);
+                          seenProviders.add(provider);
+                      }
+                      if (selectedModels.length === 6) break;
+                  }
+                  if (selectedModels.length < 6) {
+                      for (const m of models) {
+                          if (!existingIds.has(m.id) && !selectedModels.find(sm => sm.id === m.id)) {
+                              selectedModels.push(m);
+                          }
+                          if (selectedModels.length === 6) break;
+                      }
+                  }
+
+                  if (selectedModels.length === 0) {
+                      alert(filterTextRaw ? `No hay modelos nuevos que coincidan con "${filterTextRaw}"` : "No se han encontrado modelos nuevos.");
+                      return;
+                  }
+
+                  const newFormattedModels = selectedModels.map(m => {
+                      const contextK = Math.floor(m.context_length / 1024);
+                      if (type === 'free') {
+                          return `${m.id} | 🎁 FREE (${contextK}k)`;
+                      } else {
+                          const costIn = (parseFloat(m.pricing.prompt) * 1000000).toFixed(2);
+                          const costOut = (parseFloat(m.pricing.completion) * 1000000).toFixed(2);
+                          return `${m.id} | 💎 In:$${costIn} - Out:$${costOut}/M (${contextK}k)`;
+                      }
+                  });
+
+                  setAvailableModels([...newFormattedModels, ...availableModels]);
+                  setModel(newFormattedModels[0]);
+                  alert(`✅ Se han añadido ${newFormattedModels.length} modelos nuevos.`);
+              } catch (e) {
+                  console.error(e);
+                  alert("❌ Error de conexión.");
+              } finally {
+                  setIoStatus('idle');
+              }
           };
 
           const handleRunExport = async () => { setIoStatus('processing'); const success = await exportLiteBackup(); setIoStatus(success ? 'success' : 'error'); setTimeout(() => setIoStatus('idle'), 3000); };
@@ -348,132 +635,91 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
                       <div className="flex items-center gap-4 mb-6 border-b border-slate-700 pb-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><Icons.BrainCircuit size={32} /></div>
-                          <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Gestiona tu conexión con Google Gemini</p></div>
+                          <div><h2 className="text-2xl font-bold text-white">Configuración IA</h2><p className="text-slate-400 text-sm">Gestiona tu conexión con Gemini y OpenRouter</p></div>
                       </div>
 
-
                       <div className="space-y-6">
-                          <div>
-                              <label className="block text-sm font-bold text-slate-300 mb-2">Google Gemini API Key</label>
-                              <div className="relative mb-4">
-                                  <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black/50 border border-slate-600 rounded-xl p-4 pr-12 text-white focus:border-purple-500 focus:outline-none font-mono"/>
-                                  <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">{showKey ? <Icons.EyeOff size={20}/> : <Icons.Eye size={20}/>}</button>
-                              </div>
-                              <div className="flex justify-end gap-3 items-center">
-                                  <button onClick={testConnection} className={`h-[40px] px-6 rounded-xl border font-bold text-sm flex items-center gap-2 ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>
-                                      {testStatus === 'loading' ? <Icons.Loader/> : testStatus === 'success' ? <Icons.CheckCircle size={18}/> : 'PROBAR CONEXIÓN'}
-                                  </button>
-                              </div>
-                              {testStatus === 'error' && <div className="mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
-                              
-                              <div className="mb-6 border-t border-slate-700 pt-6">
-                                  <div className="flex justify-between items-center mb-2">
-                                       <label className="text-sm font-bold text-slate-300 uppercase tracking-wide">Modelo IA Activo</label>
-                                       <span className="text-[10px] text-slate-500 font-mono">{model}</span>
-                                  </div>
-                                  <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm mb-4 font-mono shadow-inner focus:ring-1 focus:ring-blue-500">
-                                      {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-                                  </select>
-                                  
-                                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                       <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase flex items-center gap-2"><Icons.Settings size={12}/> Gestión de Modelos Personalizados</label>
-                                       <div className="flex gap-2 mb-3">
-                                           <input type="text" id="newModelInput" placeholder="ID del Modelo (Ej: gemini-1.5-pro)" className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-blue-500"/>
-                                           <button onClick={() => {
-                                               const input = document.getElementById('newModelInput');
-                                               const val = input.value.trim();
-                                               if(val && !availableModels.includes(val)) {
-                                                   setAvailableModels([...availableModels, val]);
-                                                   setModel(val); // Seleccionar el nuevo automáticamente
-                                                   input.value = '';
-                                               }
-                                           }} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors shadow-lg">Añadir</button>
-                                       </div>
-                                       
-                                       <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-                                           {availableModels.map(m => (
-                                               <div key={m} className={`group flex items-center gap-2 px-2 py-1.5 rounded border text-[10px] font-mono transition-all ${model === m ? 'bg-blue-900/30 border-blue-500 text-blue-300 shadow-md' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}>
-                                                   <span className="truncate max-w-[150px]" title={m}>{m}</span>
-                                                   {availableModels.length > 1 && (
-                                                       <button onClick={(e) => {
-                                                           e.stopPropagation(); // Evitar selects accidentales
-                                                           const newList = availableModels.filter(x => x !== m);
-                                                           setAvailableModels(newList);
-                                                           if(model === m) setModel(newList[0] || availableModels[0]);
-                                                       }} className="text-red-500 hover:text-red-300 font-bold px-1 rounded hover:bg-red-900/20 transition-colors" title="Borrar modelo">×</button>
-                                                   )}
-                                               </div>
-                                           ))}
-                                       </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                  <label className="block text-xs font-bold text-blue-400 mb-2">1. Google Gemini API Key</label>
+                                  <div className="relative">
+                                      <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black/50 border border-slate-700 rounded-xl p-3 pr-10 text-white focus:outline-none text-xs font-mono"/>
+                                      <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><Icons.Eye size={16}/></button>
                                   </div>
                               </div>
-
-                              <div className="mt-6 p-6 bg-[#1e293b] border border-[#334155] rounded-xl relative overflow-hidden">
-                                  <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><Icons.HelpCircle size={20} /> Gestión de la API Key (Gratis vs Pago)</h4>
-                                  
-                                  <div className="mb-6 border-b border-slate-700 pb-6">
-                                      <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                          <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded text-[10px] uppercase border border-green-500/30">Opción Gratuita</span>
-                                          <span className="text-slate-400 text-xs font-normal">Ideal para uso básico</span>
-                                      </h5>
-                                      <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 mb-4 leading-relaxed">
-                                          <li>Accede a <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-400 hover:underline font-bold">Google AI Studio</a>.</li>
-                                          <li>Haz clic en el icono de las tres rallas del menú superior izquierdo <strong>"Get API key"</strong> luego abajo en <strong>"GET API Key, luego en CREAR CLAVE de API, se abre una ventana, pulsa CREAR CLAVE. Esto creará una clave y saldrá en la pantalla anterior, pulsas en la primera columna..."</strong>.</li>
-                                          <li>y Copia la clave y pégala arriba.</li>
-                                      </ol>
-                                      <p className="text-[10px] text-slate-400 bg-slate-900/50 p-3 rounded border border-slate-700"><strong>Límites actuales:</strong> 15 peticiones/minuto (RPM) y 1.500/día. Si la IA falla o tarda mucho, es probable que hayas superado este límite temporalmente.</p>
-                                  </div>
-                                  
-                                  <div>
-                                      <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                          <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-[10px] uppercase border border-blue-500/30">Opción Ilimitada (Pago por uso)</span>
-                                          <span className="text-slate-400 text-xs font-normal">Para evitar esperas y generar exámenes largos</span>
-                                      </h5>
-                                      <p className="text-xs text-slate-300 mb-3 leading-relaxed">Asociar una tarjeta elimina el límite de velocidad. El coste es de unos <strong>0,35€ por cada millón de palabras</strong> (céntimos al mes para un opositor). Recuerda estar logeado en GOOGLE con la misma cuenta que has usado en Google AI Studio. Sigue estos pasos:</p>
-                                      
-                                      <div className="space-y-4">
-                                          {/* PASO 1: GOOGLE CLOUD */}
-                                          <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
-                                              <h6 className="text-[10px] font-black text-blue-400 uppercase mb-2">Paso 1: Crear la cuenta de facturación</h6>
-                                              <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
-                                                  <li>PRIMERO CREA LA API GRATUITA SEGÚN LO EXPUESTO EN EL PASO ANTERIOR "OPCION GRATUITA". Luego, Pulsa en esta pantalla abajo en <strong>"1. Crear Facturación (Cloud)"</strong>.</li>
-                                                  <li>En la pantalla que aparece, pulsa el botón <strong>"+ CREAR CUENTA"</strong> (arriba a la izquierda).</li>
-                                                  <li><strong>Configuración:</strong> Elige tu país, tu divisa (Euro) y rellena los datos de tu tarjeta bancaria. Pulsa en "Iniciar mi prueba gratuita" o "Confirmar".</li>
-                                              </ol>
-                                          </div>
-                                  
-                                          {/* PASO 2: VINCULAR EN AI STUDIO */}
-                                          <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
-                                              <h6 className="text-[10px] font-black text-purple-400 uppercase mb-2">Paso 2: Activar el pago en tu API Key</h6>
-                                              <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
-                                                  <li>Pulsa en esta pantalla abajo en <strong>"2. Vincular Clave (AI Studio)"</strong>.</li>
-                                                  <li>Saldrá un listado con las claves creadas (si no creaste más que una, solo la creada) en esa línea al final debajo de la columna QUOTE TIER habrá un link en azul con ACTIVAR LA FACTURACIÓN.</li>
-                                                  <li>Haz clic ahí.</li>
-                                                  <li>Selecciona la cuenta de facturación que creaste en el Paso 1 y confirma.</li>
-                                              </ol>
-                                          </div>
-                                  
-                                          {/* PASO 3: COPIAR CLAVE */}
-                                          <div className="bg-slate-950 p-2 rounded border border-blue-500/30 text-[10px] text-slate-400 italic">
-                                              * Por último, si no lo habías hecho antes, copia la Clave API de esa misma línea (pulsando en el dato azul de la primera columna CLAVE y pégala en el campo superior de esta pantalla en "Google Gemini API Key" en esta aplicación.
-                                          </div>
-                                      </div>
-                                      
-                                      <div className="flex gap-3 mt-6">
-                                          <a href="https://console.cloud.google.com/billing" target="_blank" className="flex-1 text-center py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-blue-500 shadow-lg">
-                                              <Icons.ExternalLink size={14}/> 1. Crear Facturación (Cloud)
-                                          </a>
-                                          <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex-1 text-center py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 border border-slate-600">
-                                              <Icons.ExternalLink size={14}/> 2. Vincular Clave (AI Studio)
-                                          </a>
-                                      </div>
+                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                  <label className="block text-xs font-bold text-orange-400 mb-2">2. OpenRouter API Key</label>
+                                  <div className="relative">
+                                      <input type={showKey ? "text" : "password"} value={secondaryApiKey} onChange={(e) => setSecondaryApiKey(e.target.value)} placeholder="sk-or-..." className="w-full bg-black/50 border border-slate-700 rounded-xl p-3 pr-10 text-white focus:outline-none text-xs font-mono"/>
+                                      <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><Icons.Eye size={16}/></button>
                                   </div>
                               </div>
                           </div>
-                      </div>                      
 
-                      
-                      
+                          <div className="flex justify-end gap-3 items-center">
+                              <button onClick={testConnection} className={`h-[40px] px-6 rounded-xl border font-bold text-sm flex items-center gap-2 ${testStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : testStatus === 'error' ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}>
+                                  {testStatus === 'loading' ? <Icons.Loader/> : testStatus === 'success' ? <Icons.CheckCircle size={18}/> : 'PROBAR CONEXIÓN'}
+                              </button>
+                          </div>
+                          {testStatus === 'error' && <div className="p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-xs font-mono whitespace-pre-wrap">{errorDetail}</div>}
+                          
+                          <div className="border-t border-slate-700 pt-6">
+                              <div className="flex justify-between items-center mb-2">
+                                   <label className="text-sm font-bold text-slate-300 uppercase tracking-wide">Modelo IA Activo</label>
+                                   <span className="text-[10px] text-slate-500 font-mono">{model}</span>
+                              </div>
+                              <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-sm mb-4 font-mono shadow-inner focus:ring-1 focus:ring-blue-500">
+                                  {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                              
+                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                   <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase flex items-center gap-2"><Icons.Settings size={12}/> Gestión de Modelos</label>
+                                   
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                       <button onClick={() => fetchDynamicModels('paid')} className="bg-gradient-to-r from-blue-700 to-indigo-800 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1">Top 6 (Pago) OpenRouter</button>
+                                       <button onClick={() => fetchDynamicModels('free')} className="bg-gradient-to-r from-emerald-700 to-teal-800 hover:to-teal-700 text-white px-3 py-2 rounded-lg text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1">Top 6 (Gratis) OpenRouter</button>
+                                       <button onClick={handleSortModels} className="bg-slate-800 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-[9px] font-bold uppercase transition-colors border border-slate-700">Agrupar por Empresa</button>
+                                       <button onClick={handleSortByPrice} className="bg-slate-800 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-[9px] font-bold uppercase transition-colors border border-slate-700">Ordenar por Precio</button>
+                                   </div>
+
+                                   <div className="flex gap-2 mb-3">
+                                       <input type="text" id="newModelInput" placeholder="ID (Ej: meta-llama/llama-3-8b-instruct:free)" className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-blue-500"/>
+                                       <button onClick={() => {
+                                           const input = document.getElementById('newModelInput');
+                                           const val = input.value.trim();
+                                           if(val && !availableModels.includes(val)) {
+                                               setAvailableModels([...availableModels, val]);
+                                               setModel(val);
+                                               input.value = '';
+                                           }
+                                       }} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors">Añadir</button>
+                                   </div>
+                                   
+                                   <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                                       {availableModels.map((m, index) => (
+                                           <div key={m} className={`group flex items-center justify-between px-3 py-2 rounded border text-[10px] font-mono transition-all gap-3 ${model === m ? 'bg-blue-900/30 border-blue-500 text-blue-300 shadow-md' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}>
+                                               <div className="flex-1 min-w-0"><span className="block truncate w-full" title={m}>{m}</span></div>
+                                               <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                                                   <button onClick={(e) => { e.stopPropagation(); if (index > 0) { const newList = [...availableModels]; [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]]; setAvailableModels(newList); } }} disabled={index === 0} className="text-slate-400 hover:text-white disabled:opacity-20 px-1 py-0.5 bg-black/20 rounded">▲</button>
+                                                   <button onClick={(e) => { e.stopPropagation(); if (index < availableModels.length - 1) { const newList = [...availableModels]; [newList[index + 1], newList[index]] = [newList[index], newList[index + 1]]; setAvailableModels(newList); } }} disabled={index === availableModels.length - 1} className="text-slate-400 hover:text-white disabled:opacity-20 px-1 py-0.5 bg-black/20 rounded">▼</button>
+                                                   {availableModels.length > 1 && (
+                                                       <button onClick={(e) => { e.stopPropagation(); const newList = availableModels.filter(x => x !== m); setAvailableModels(newList); if(model === m) setModel(newList[0] || availableModels[0]); }} className="text-red-500 hover:text-red-300 font-bold px-2 py-0.5 text-xs rounded hover:bg-red-900/30 ml-2">×</button>
+                                                   )}
+                                               </div>
+                                           </div>
+                                       ))}
+                                   </div>
+                              </div>
+                          </div>
+
+                          <div className="mt-6 p-6 bg-[#1e293b] border border-[#334155] rounded-xl relative overflow-hidden">
+                              <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><Icons.HelpCircle size={20} /> Gestión de la API (Gemini Directo o OpenRouter)</h4>
+                              <div className="text-xs text-slate-300 space-y-3 leading-relaxed">
+                                  <p><strong>Google Gemini (Directo):</strong> Puedes obtener tu clave gratis de <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-400 hover:underline font-bold">Google AI Studio</a>. Límite de 15 consultas/minuto.</p>
+                                  <p><strong>OpenRouter:</strong> Te da acceso a ChatGPT, Claude, DeepSeek y decenas de modelos (muchos gratuitos). Crea tu cuenta y obtén tu clave API en <a href="https://openrouter.ai/keys" target="_blank" className="text-orange-400 hover:underline font-bold">openrouter.ai</a>.</p>
+                              </div>
+                          </div>
+                      </div>                      
                   </div>
 
                   <div className="max-w-2xl w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl mb-8">
@@ -482,26 +728,11 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
                           <div><h2 className="text-2xl font-bold text-white">Copia de Seguridad</h2><p className="text-slate-400 text-sm">Exporta tu configuración e historial</p></div>
                       </div>
                       
-                      <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-xl p-4 mb-6">
-                          <h4 className="text-yellow-500 font-bold text-sm mb-2 flex items-center gap-2"><Icons.AlertTriangle size={16}/> Información Importante</h4>
-                          <p className="text-sm text-slate-300 leading-relaxed">
-                              El archivo de exportación contiene <strong>toda tu configuración, claves, materias e historial de resultados</strong>, pero para mantener el archivo ligero, <strong className="text-white">NO incluye el contenido de los documentos PDF</strong>.
-                          </p>
-                          <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-                              Al restaurar una copia, deberás entrar en la configuración de cada materia, borrar los documentos que aparezcan y <strong>volver a subirlos manualmente</strong>.
-                          </p>
-                      </div>
-                      
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <button 
-                              onClick={handleRunExport} 
-                              disabled={ioStatus === 'processing'}
-                              className={`flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-slate-800 border-slate-600 hover:bg-slate-700 text-white'}`}
-                          >
+                          <button onClick={handleRunExport} disabled={ioStatus === 'processing'} className={`flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-slate-800 border-slate-600 hover:bg-slate-700 text-white'}`}>
                               {ioStatus === 'processing' ? <Icons.Loader size={20}/> : <Icons.Upload size={20} className="rotate-180" />} 
-                              {ioStatus === 'processing' ? 'Procesando...' : 'EXPORTAR CONFIG'}
+                              EXPORTAR CONFIG
                           </button>
-
                           <label className={`cursor-pointer flex items-center justify-center gap-2 py-4 px-6 rounded-xl border transition-all font-bold ${ioStatus === 'processing' ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'bg-blue-600 border-blue-500 hover:bg-blue-500 text-white'}`}>
                               <input type="file" accept=".json" className="hidden" onChange={handleRunImport} disabled={ioStatus === 'processing'} />
                               <Icons.Upload size={20} /> RESTAURAR
@@ -515,7 +746,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
                           <div><h2 className="text-2xl font-bold text-white">Registro de la aplicación</h2><p className="text-slate-400 text-sm">Estado de la instalación y licencia</p></div>
                       </div>
                       <div className="space-y-6">
-                          <p className="text-sm text-slate-400 leading-relaxed italic">Esta plataforma es un proyecto independiente que se sustenta exclusivamente mediante un modelo de <strong>crowdfunding</strong> y las aportaciones directas de sus usuarios. Tu registro ayuda a mantener los costes de desarrollo y mantenimiento.</p>
+                          <p className="text-sm text-slate-400 leading-relaxed italic">Esta plataforma es un proyecto independiente financiado exclusivamente mediante aportaciones directas y crowdfunding de sus usuarios.</p>
                           <div className="bg-black/30 border border-slate-700 rounded-xl p-5">
                               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Número de Registro / Código de Instalación</label>
                               <div className="flex gap-3">
@@ -539,10 +770,8 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               </div>
           );
       };
-  
-      
 
-const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
+      const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
           const [processing, setProcessing] = useState(false);
@@ -618,31 +847,34 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
 
           const handleViewFileText = async (fileId) => { try { const data = await getFromDB(fileId); setFileContent((data && data.text) ? data.text : "Sin contenido."); setViewingFile(true); } catch(e) { setFileContent("Error: " + e.message); setViewingFile(true); } };
           const handleOpenFileOriginal = async (fileId) => { try { const data = await getFromDB(fileId); if (data && data.fileData) window.open(URL.createObjectURL(data.fileData), '_blank'); } catch(e) { alert("Error: " + e.message); } };
+          
           const handleSearchDescription = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
+              if(!apiKey) return alert("Falta API Key de Gemini.");
               setSearchingDesc(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": pct_examen, "dg": nota_carrera, "dw": mult_carrera, "ex": extras}].`);
+                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": pct_examen, "dg": nota_carrera, "dw": mult_carrera, "ex": extras}].`, true);
                   const list = extractJSON(res);
                   if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||'', ew: i.ew||90, dg: i.dg||5, dw: i.dw||6, ex: i.ex||0}))); 
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
           };
+          
           const handleSearchLastCall = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
+              if(!apiKey) return alert("Falta API Key de Gemini.");
               setSearchingLastCall(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes. Intenta encontrar el enlace DIRECTO al .pdf del último examen de "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL", "ew": pct_examen, "dw": mult_carrera}.`);
+                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes. Intenta encontrar el enlace DIRECTO al .pdf del último examen de "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL", "ew": pct_examen, "dw": mult_carrera}.`, true);
                   const data = extractJSON(res);
                   if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true, examWeight: data.ew||prev.examWeight, degreeWeight: data.dw||prev.degreeWeight }));
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
           };
+          
           const handleMagicWandTopics = async () => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
-              if(!apiKey) return alert("Falta API Key");
+              if(!apiKey) return alert("Falta API Key de Gemini.");
               setGeneratingTopics(true);
-              try { const res = await askGemini(JSON.parse(apiKey), `Temario "${editForm.type}". JSON array: [{"name": "Tema", "pct": peso}].`); const list = extractJSON(res); if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list })); } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
+              try { const res = await askGemini(JSON.parse(apiKey), `Temario "${editForm.type || editForm.name}". JSON array: [{"name": "Tema", "pct": peso}].`, false); const list = extractJSON(res); if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list })); } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
           };
 
           if (isEditing) {
@@ -798,9 +1030,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           );
       };
 
-        
-
-  const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
+      const AIAnalysis = ({ results, activeSubject, setSubjects, onConsolidateHistory }) => {
           const [analysis, setAnalysis] = useState(null);
           const [loading, setLoading] = useState(false);
           const [aiAdvice, setAiAdvice] = useState('');
@@ -859,16 +1089,16 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           };
           const updateConsolidation = (orphan, field, value) => { setConsolidationMap(prev => ({ ...prev, [orphan]: { ...prev[orphan], [field]: value } })); };
 
-          const askAI = async (prompt) => {
+          const askAIWithLocals = async (prompt, useSearch = false) => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) { alert("Falta API Key"); return null; }
               setLoading(true);
-              try { const text = await askGemini(JSON.parse(apiKey), prompt); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
+              try { const text = await askGemini(JSON.parse(apiKey), prompt, useSearch); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
           };
 
           const getAdvice = async () => {
               const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
-              const text = await askAI(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`);
+              const text = await askAIWithLocals(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`, false);
               if(text) setAiAdvice(text);
           };
 
@@ -883,7 +1113,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               CRITERIO: Asigna mucho peso (incluso 100% si es necesario) a los temas con PEOR nota o menos preguntas. Pon 0% a los temas dominados.
               Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
 
-              const res = await askAI(prompt);
+              const res = await askAIWithLocals(prompt, false);
               if(res) { 
                   const json = extractJSON(res); 
                   if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } 
@@ -942,7 +1172,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                   return (<div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700/50"><div className="truncate text-xs text-white" title={t.name}>{t.name}</div><div className="text-center text-xs text-slate-400">{t.pct}%</div><div className={`text-center text-xs font-bold flex items-center justify-center gap-1 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{newPct}% {diff !== 0 && (diff > 0 ? <Icons.TrendingUp size={10}/> : <Icons.TrendingDown size={10}/>)}</div></div>) 
                               })}
                           </div>
-                          <p className="text-[10px] text-blue-300 italic mb-4">* Esta propuesta NO modificará tus materias. Se guardará para usarla en un "Simulacro de Refuerzo".</p>
+                          <p className="text-[10px] text-blue-300 italic mb-4">* Esta propuesta no modificará tus materias. Se guardará para usarla en un "Simulacro de Refuerzo".</p>
                           <div className="flex gap-2">
                               <button onClick={() => setShowRebalance(false)} className="flex-1 py-2 bg-slate-700 rounded text-slate-300 text-xs font-bold">Cancelar</button>
                               <button onClick={saveProposalToReinforcement} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded">GUARDAR PROPUESTA</button>
@@ -955,8 +1185,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           );
       };
 
-
-  const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
+      const ExamTab = ({ activeSubject, onSaveResult, session, setSession, isAuth, trialCount, setTc }) => {
           const { status, questions, answers, currentIndex, timeLeft, autoNext, showGrid, loadingMsg, error, batchQueue } = session;
           const [showRestartConfirm, setShowRestartConfirm] = useState(false);
           const [showFinishConfirm, setShowFinishConfirm] = useState(false);
@@ -1076,7 +1305,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
               setLoadingDeepDive(true); setShowDeepDive(true); setDeepDiveContent('');
               try {
                   const prompt = `Actúa como preparador. Pregunta: "${currentQ.question}". Correcta: "${currentQ.options[currentQ.correct]}". Reglas: 1. Sin saludos. 2. Usa UNICODE (→, ✅). 3. Bloques: 📘 FUNDAMENTO TEÓRICO y 🧠 CLAVE DE MEMORIZACIÓN.`;
-                  const text = await askGemini(apiKey, prompt);
+                  const text = await askGemini(apiKey, prompt, false);
                   setDeepDiveContent(text);
               } catch (e) { setDeepDiveContent("Error al conectar con la IA."); } finally { setLoadingDeepDive(false); }
           };
@@ -1143,6 +1372,13 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                         <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
                             <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                             <p className="text-slate-400 mb-8">{activeSubject.type}</p>
+                            
+                            {error && (
+                                <div className="mb-6 p-4 bg-red-950/40 border border-red-500/50 rounded-xl text-red-200 text-xs text-left font-mono whitespace-pre-wrap">
+                                    <strong>Error al iniciar examen:</strong> {error}
+                                </div>
+                            )}
+
                             <div className="flex justify-center gap-4 mb-8">
                                 {activeSubject.files?.length > 0 && <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>}
                                 {activeSubject.includeLastCall && <div className="bg-purple-900/30 border border-purple-500/50 px-4 py-2 rounded-lg text-sm text-purple-200 flex items-center gap-2"><Icons.Clock size={18}/> Convocatoria</div>}
@@ -1151,7 +1387,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                 <label className="flex items-center gap-3 cursor-pointer mb-2"><input type="checkbox" checked={isReinforcement} onChange={e => setIsReinforcement(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" /><span className="font-bold text-yellow-100 uppercase text-xs">Simulacro de Refuerzo Específico</span></label>
                                 <p className="text-[10px] text-yellow-500/80 italic ml-8 leading-tight">* No computará para medias globales de puntos ni gráficas de evolución.</p>
                             </div>
-                            <button onClick={() => { if (!activeSubject || !apiKey) alert("Configuración incompleta."); else if (isReinforcement) setShowWeightModal(true); else startExam(); }} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
+                            <button onClick={() => { if (!activeSubject || (!apiKey && !JSON.parse(window.localStorage.getItem('openrouter_api_key') || '""'))) alert("Configuración incompleta. Configura las APIs en Ajustes."); else if (isReinforcement) setShowWeightModal(true); else startExam(); }} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex justify-center gap-3 transition-transform hover:scale-[1.02]"><Icons.Play size={24}/> COMENZAR</button>
                         </div>
                     )}
                     {showWeightModal && (<div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-6 fade-in"><div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] text-left"><div className="p-6 border-b border-slate-800 shrink-0"><h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Icons.Settings size={24} className="text-yellow-500"/> Configuración de Refuerzo</h3><p className="text-xs text-slate-400">Define los pesos para este simulacro. No altera la materia.</p></div><div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3"><div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-500 uppercase px-3"><div className="col-span-6">Concepto</div><div className="col-span-3 text-center">Original</div><div className="col-span-3 text-right">Refuerzo</div></div>{customWeights.map((item, i) => (<div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="col-span-6 flex items-center gap-2 min-w-0"><div className={`p-1.5 rounded shrink-0 ${item.type==='pdf'?'bg-blue-900/30 text-blue-400':item.type==='last_call'?'bg-purple-900/30 text-purple-400':'bg-green-900/30 text-green-400'}`}>{item.type==='pdf'?<Icons.FileText size={12}/>:item.type==='last_call'?<Icons.Clock size={12}/>:<Icons.Globe size={12}/>}</div><div className="truncate text-xs font-bold text-white" title={item.name}>{item.name}</div></div><div className="col-span-3 text-center"><span className="text-xs text-slate-400 font-mono bg-slate-900/50 px-2 py-1 rounded">{item.originalPct}%</span></div><div className="col-span-3 flex items-center justify-end gap-1"><input type="number" value={item.pct} onChange={e => { const val = parseFloat(e.target.value) || 0; setCustomWeights(prev => prev.map((it, idx) => idx === i ? { ...it, pct: val } : it)); }} className="w-12 bg-black border border-slate-600 rounded p-1 text-right text-white text-xs font-mono focus:border-yellow-500 outline-none" /><span className="text-xs text-slate-500">%</span></div></div>))}</div><div className="p-6 border-t border-slate-800 bg-slate-900 rounded-b-2xl shrink-0 space-y-3"><div className="flex justify-between items-center text-xs font-bold mb-2"><span className="text-slate-400 uppercase tracking-widest">TOTAL PESO:</span><span className={Math.round(customWeights.reduce((s, i) => s + i.pct, 0)) === 100 ? "text-green-400 text-lg" : "text-red-400 text-lg"}>{customWeights.reduce((s, i) => s + i.pct, 0).toFixed(2)}%</span></div><button onClick={loadAIProposal} className="w-full py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Icons.BrainCircuit size={14}/> CARGAR PROPUESTA IA</button><div className="flex gap-3"><button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">CANCELAR</button><button onClick={startExam} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl shadow-lg">COMENZAR</button></div></div></div></div>)}
@@ -1166,8 +1402,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
             const paceString = `${paceSeconds >= 0 ? '+' : '-'}${Math.floor(paceAbs/60).toString().padStart(2,'0')}:${Math.floor(paceAbs%60).toString().padStart(2,'0')}`;
             const progressPct = ((Object.keys(answers).length / activeSubject.qCount) * 100).toFixed(1);
 
-
-            // LOGICA MATEMÁTICA SEGÚN REQUERIMIENTOS (Asegurando formato numérico)
             const safeExamWeight = Number(activeSubject.examWeight) || 90;
             const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
             const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
@@ -1179,14 +1413,11 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
             const puntosMeritos = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
             const notaFinalTotal = puntosExamenAportados + puntosMeritos;
             
-            // ESCALA BARRA
             const maxPointsPossible = activeSubject.qCount * activeSubject.pointsHit;
             const posTechoExamenPct = (examContribPct * 100); 
             const posCorteLilaPct = (safeCutoff / maxPointsPossible) * 100;
             const barRellenoPct = Math.min(100, (notaFinalTotal / maxPointsPossible) * 100);
 
-          
-            // MINI STATS CON [%] EN NEGRITA
             const totalQs = activeSubject.qCount || 1;
             const hPct = ((stats.hits / totalQs) * 100).toFixed(1);
             const mPct = ((stats.misses / totalQs) * 100).toFixed(1);
@@ -1211,7 +1442,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                             </div>
                         </div>
 
-                        {/* TARJETONES PRINCIPALES */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 items-stretch">
                             <div className="bg-indigo-900/40 border-2 border-indigo-500/50 rounded-xl p-3 flex flex-col items-center justify-center">
                                 <div className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mb-1">Netas (aciertos-fallos)</div>
@@ -1240,10 +1470,8 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                             <div className="bg-purple-900/20 border border-purple-500/50 rounded px-1 py-1 text-center"><div className="text-[8px] text-purple-400 uppercase font-bold">Corte Oficial</div><div className="text-xs font-bold text-white">{activeSubject.lastCallCutoff || 0}</div></div>
                         </div>
 
-                        {/* BARRA TÉCNICA */}
                         <div className="relative pt-1 pb-10 px-1">
                             <div className="relative h-6 bg-slate-800/50 rounded-lg border border-slate-700 overflow-visible">
-                                {/* ESCALA NUMÉRICA */}
                                 <div className="absolute inset-0 flex pointer-events-none">
                                     {Array.from({ length: Math.floor(maxPointsPossible / 40) + 1 }).map((_, i) => (
                                         <div key={i} className="absolute h-full border-l border-white/10" style={{ left: `${(i * 40 / maxPointsPossible) * 100}%` }}>
@@ -1251,7 +1479,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                         </div>
                                     ))}
                                 </div>
-                                {/* RELLENO + NOTA FINAL */}
                                 <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-green-500 to-green-400 transition-all duration-500 flex items-center justify-center min-w-[2px] rounded-l-lg z-10" style={{ width: `${barRellenoPct}%` }}>
                                     {barRellenoPct > 10 && (
                                         <span className="text-[10px] font-black text-white drop-shadow-md whitespace-nowrap">
@@ -1259,9 +1486,7 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                         </span>
                                     )}
                                 </div>
-                                {/* MARCADOR VERDE (TECHO) */}
                                 <div className="absolute top-0 h-full w-0.5 bg-green-500 z-10 shadow-[0_0_8px_rgba(34,197,94,0.5)]" style={{ left: `${posTechoExamenPct}%` }}></div>
-                                {/* MARCADOR LILA (CORTE) */}
                                 {activeSubject.lastCallCutoff > 0 && (
                                     <div className="absolute top-0 h-full w-0.5 bg-purple-500 z-20 shadow-[0_0_8px_rgba(168,85,247,0.5)]" style={{ left: `${posCorteLilaPct}%` }}></div>
                                 )}
@@ -1282,7 +1507,6 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
                                         return <button key={idx} disabled={answers[currentIndex]!==undefined} onClick={() => handleAnswer(idx)} className={`text-left p-4 rounded-xl border-2 transition-all font-medium flex gap-3 ${btnClass}`}><div className="shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">{String.fromCharCode(65+idx)}</div><span>{opt}</span></button>;
                                     })}
                                 </div>
-                                {/* BLOQUE RECUPERADO: EXPLICACIÓN Y BOTÓN IA */}
                                 {answers[currentIndex] !== undefined && answers[currentIndex] !== questions[currentIndex].correct && (
                                     <div className="mt-6 bg-slate-900 border-l-4 border-red-500 p-4 text-slate-300 text-sm fade-in">
                                         <div className="mb-3">{questions[currentIndex].explanation}</div>
@@ -1313,475 +1537,520 @@ const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectI
           return null; 
       };
 
-    
-const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {
-    const [showGraph, setShowGraph] = useState(false);
-    const [showManual, setShowManual] = useState(false);
-    const [manualMode, setManualMode] = useState('create'); 
-    const [editingIndex, setEditingIndex] = useState(-1);
-    const [filterStart, setFilterStart] = useState('2020-01-01');
-    const [filterEnd, setFilterEnd] = useState('2099-12-31');
-    const [viewMode, setViewMode] = useState('global'); 
-    const [manualData, setManualData] = useState({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, skips: 0, timeMinutes: 0 });
-    const [breakdownInputs, setBreakdownInputs] = useState({}); 
+    const HistoryTab = ({ results, onClear, onDeleteOne, activeSubject, onAddManual, onUpdateManual, setSubjects, setHistory }) => {
+        const [showGraph, setShowGraph] = useState(false);
+        const [showManual, setShowManual] = useState(false);
+        const [manualMode, setManualMode] = useState('create'); 
+        const [editingIndex, setEditingIndex] = useState(-1);
+        const [filterStart, setFilterStart] = useState('2020-01-01');
+        const [filterEnd, setFilterEnd] = useState('2099-12-31');
+        const [viewMode, setViewMode] = useState('global'); 
+        const [manualData, setManualData] = useState({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, skips: 0, timeMinutes: 0 });
+        const [breakdownInputs, setBreakdownInputs] = useState({}); 
 
-    const executeConsolidation = (merges, additions) => {
-        if (Object.keys(merges).length > 0) {
-            setHistory(prevHistory => prevHistory.map(record => {
-                if (!record.details || !record.details.topics) return record;
-                const newTopics = { ...record.details.topics };
-                Object.keys(merges).forEach(oldName => {
-                    if (newTopics[oldName]) {
-                        const newName = merges[oldName];
-                        if (newTopics[newName]) {
-                            newTopics[newName].h += newTopics[oldName].h;
-                            newTopics[newName].m += newTopics[oldName].m;
-                            newTopics[newName].s = (newTopics[newName].s || 0) + (newTopics[oldName].s || 0);
-                            newTopics[newName].t += newTopics[oldName].t;
-                        } else { newTopics[newName] = newTopics[oldName]; }
-                        delete newTopics[oldName];
-                    }
-                });
-                return { ...record, details: { ...record.details, topics: newTopics } };
-            }));
-        }
-        if (additions.length > 0) {
-            setSubjects(prev => prev.map(s => {
-                if (s.id === activeSubject.id) {
-                    const existingNames = new Set(s.topics.map(t => t.name));
-                    const newTopics = [...s.topics];
-                    additions.forEach(add => { if (!existingNames.has(add.name)) newTopics.push({ name: add.name, pct: add.pct }); });
-                    const totalPct = newTopics.reduce((sum, t) => sum + t.pct, 0);
-                    if (totalPct > 100) { const factor = 100 / totalPct; newTopics.forEach(t => t.pct = parseFloat((t.pct * factor).toFixed(2))); }
-                    return { ...s, topics: newTopics };
-                } return s;
-            }));
-        }
-        setViewMode('global');
-    };
-
-    const filteredResults = useMemo(() => {
-        if(!activeSubject) return [];
-        return results.map((r, i) => ({...r, originalIndex: i})).filter(r => {
-            const rDate = new Date(r.date); const start = new Date(filterStart); const end = new Date(filterEnd); end.setHours(23,59,59);
-            return r.subjectId === activeSubject.id && rDate >= start && rDate <= end;
-        });
-    }, [results, activeSubject, filterStart, filterEnd]);
-
-    const availableFilters = useMemo(() => {
-        if (!activeSubject) return { sources: [], topics: [] };
-        const sources = new Set(); const topics = new Set();
-        
-        if (activeSubject.files) activeSubject.files.forEach(f => sources.add(f.name));
-        if (activeSubject.includeLastCall) sources.add(`[Convocatoria ${activeSubject.lastCallDate}]`);
-        sources.add("[Internet]");
-        activeSubject.topics.forEach(t => topics.add(t.name));
-
-        filteredResults.forEach(r => {
-            if (r.details) {
-                if (r.details.sources) Object.keys(r.details.sources).forEach(s => sources.add(s));
-                if (r.details.topics) Object.keys(r.details.topics).forEach(t => topics.add(t));
+        const executeConsolidation = (merges, additions) => {
+            if (Object.keys(merges).length > 0) {
+                setHistory(prevHistory => prevHistory.map(record => {
+                    if (!record.details || !record.details.topics) return record;
+                    const newTopics = { ...record.details.topics };
+                    Object.keys(merges).forEach(oldName => {
+                        if (newTopics[oldName]) {
+                            const newName = merges[oldName];
+                            if (newTopics[newName]) {
+                                newTopics[newName].h += newTopics[oldName].h;
+                                newTopics[newName].m += newTopics[oldName].m;
+                                newTopics[newName].s = (newTopics[newName].s || 0) + (newTopics[oldName].s || 0);
+                                newTopics[newName].t += newTopics[oldName].t;
+                            } else { newTopics[newName] = newTopics[oldName]; }
+                            delete newTopics[oldName];
+                        }
+                    });
+                    return { ...record, details: { ...record.details, topics: newTopics } };
+                }));
             }
-        });
-        return { sources: Array.from(sources).sort(), topics: Array.from(topics).sort() };
-    }, [activeSubject, filteredResults]);
-
-    const viewResults = useMemo(() => {
-            if (viewMode === 'global') return filteredResults;
-            return filteredResults.filter(r => r.details && (r.details.sources?.[viewMode] || r.details.topics?.[viewMode]));
-    }, [filteredResults, viewMode]);
-
-    const stats = useMemo(() => {
-        const statsResults = viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
-        
-        if (statsResults.length === 0) {
-            if (viewMode !== 'global' && viewResults.length > 0) {
-                return { total: 0, avgVal: 0, totalAnswered: 0, totalSkipped: 0, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
+            if (additions.length > 0) {
+                setSubjects(prev => prev.map(s => {
+                    if (s.id === activeSubject.id) {
+                        const existingNames = new Set(s.topics.map(t => t.name));
+                        const newTopics = [...s.topics];
+                        additions.forEach(add => { if (!existingNames.has(add.name)) newTopics.push({ name: add.name, pct: add.pct }); });
+                        const totalPct = newTopics.reduce((sum, t) => sum + t.pct, 0);
+                        if (totalPct > 100) { const factor = 100 / totalPct; newTopics.forEach(t => t.pct = parseFloat((t.pct * factor).toFixed(2))); }
+                        return { ...s, topics: newTopics };
+                    } return s;
+                }));
             }
-            return null;
-        }
+            setViewMode('global');
+        };
 
-        const total = statsResults.length;
-        if (viewMode === 'global') {
-            const safeExamWeight = Number(activeSubject.examWeight) || 90;
-            const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
-            const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
-            const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
+        const filteredResults = useMemo(() => {
+            if(!activeSubject) return [];
+            return results.map((r, i) => ({...r, originalIndex: i})).filter(r => {
+                const rDate = new Date(r.date); const start = new Date(filterStart); const end = new Date(filterEnd); end.setHours(23,59,59);
+                return r.subjectId === activeSubject.id && rDate >= start && rDate <= end;
+            });
+        }, [results, activeSubject, filterStart, filterEnd]);
 
-            const examWeightFactor = safeExamWeight / 100;
-            const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
+        const availableFilters = useMemo(() => {
+            if (!activeSubject) return { sources: [], topics: [] };
+            const sources = new Set(); const topics = new Set();
+            
+            if (activeSubject.files) activeSubject.files.forEach(f => sources.add(f.name));
+            if (activeSubject.includeLastCall) sources.add(`[Convocatoria ${activeSubject.lastCallDate}]`);
+            sources.add("[Internet]");
+            activeSubject.topics.forEach(t => topics.add(t.name));
 
-            const avgRawScore = statsResults.reduce((acc, r) => acc + (r.score || 0), 0) / total;
-            const avgWeightedScore = avgRawScore * examWeightFactor;
-            const avgFinalScore = avgWeightedScore + meritPoints;
-       
-            const avgPct = statsResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
-            const avgHits = statsResults.reduce((acc, r) => acc + r.hits, 0) / total;
-            const avgMisses = statsResults.reduce((acc, r) => acc + r.misses, 0) / total;
-            const avgSkips = statsResults.reduce((acc, r) => acc + r.skips, 0) / total;
-            const avgNetas = statsResults.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
-            const avgGlobalHitRate = statsResults.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
-            const avgTimeStr = formatTime(Math.round(statsResults.reduce((acc, r) => acc + (r.durationSeconds || 0), 0) / total));
-            const totalAnswered = statsResults.reduce((acc, r) => acc + (r.hits + r.misses), 0);
-            const totalSkipped = statsResults.reduce((acc, r) => acc + r.skips, 0);
+            filteredResults.forEach(r => {
+                if (r.details) {
+                    if (r.details.sources) Object.keys(r.details.sources).forEach(s => sources.add(s));
+                    if (r.details.topics) Object.keys(r.details.topics).forEach(t => topics.add(t));
+                }
+            });
+            return { sources: Array.from(sources).sort(), topics: Array.from(topics).sort() };
+        }, [activeSubject, filteredResults]);
 
-            return { 
-                total, avgRawScore, avgWeightedScore, avgFinalScore, meritPoints,
-                avgPct, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, avgTimeStr, 
-                totalAnswered, totalSkipped, isGlobal: true 
-            };
-        } else {
-            let sumRate = 0, totalAnswered = 0, totalSkipped = 0;
-            statsResults.forEach(r => { const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; if(det && det.t > 0) { sumRate += (det.h / det.t) * 100; totalAnswered += (det.h + det.m); totalSkipped += (det.s || 0); } });
-            return { total, avgVal: sumRate / total, totalAnswered, totalSkipped, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
-        }
-    }, [viewResults, viewMode, activeSubject]);
+        const viewResults = useMemo(() => {
+                if (viewMode === 'global') return filteredResults;
+                return filteredResults.filter(r => r.details && (r.details.sources?.[viewMode] || r.details.topics?.[viewMode]));
+        }, [filteredResults, viewMode]);
 
-    const graphResults = useMemo(() => {
-        return viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
-    }, [viewResults, viewMode]);
+        const stats = useMemo(() => {
+            const statsResults = viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
+            
+            if (statsResults.length === 0) {
+                if (viewMode !== 'global' && viewResults.length > 0) {
+                    return { total: 0, avgVal: 0, totalAnswered: 0, totalSkipped: 0, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
+                }
+                return null;
+            }
 
-    const allPossibleTopics = useMemo(() => {
-        if (!activeSubject) return [];
-        const t = activeSubject.topics.map(t => t.name);
-        const f = activeSubject.files ? activeSubject.files.map(f => f.name) : [];
-        return [...t, ...f];
-    }, [activeSubject]);
+            const total = statsResults.length;
+            if (viewMode === 'global') {
+                const safeExamWeight = Number(activeSubject.examWeight) || 90;
+                const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
+                const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
+                const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
 
-    const openManualModal = (mode, data = null, idx = -1) => {
-        setManualMode(mode);
-        setBreakdownInputs({});
-        if (mode === 'edit' && data) { 
-            setManualData({ date: new Date(data.date).toISOString().slice(0,10), hits: data.hits, misses: data.misses, skips: data.skips || 0, timeMinutes: data.durationSeconds ? Math.round(data.durationSeconds / 60) : 0 }); 
-            setEditingIndex(idx); 
-        } else { 
-            setManualData({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, skips: 0, timeMinutes: activeSubject ? activeSubject.timeMinutes : 0 }); 
-            const initialBreakdown = {};
-            allPossibleTopics.forEach(t => initialBreakdown[t] = { h: '', m: '', s: '' });
-            setBreakdownInputs(initialBreakdown);
-        }
-        setShowManual(true);
-    };
+                const examWeightFactor = safeExamWeight / 100;
+                const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
 
-    const handleBreakdownChange = (topic, field, value) => {
-        const val = parseInt(value) || 0;
-        const newInputs = { ...breakdownInputs, [topic]: { ...breakdownInputs[topic], [field]: val } };
-        setBreakdownInputs(newInputs);
-        let totalH = 0, totalM = 0, totalS = 0;
-        Object.values(newInputs).forEach(v => { totalH += (v.h || 0); totalM += (v.m || 0); totalS += (v.s || 0); });
-        if (totalH > 0 || totalM > 0 || totalS > 0) setManualData(prev => ({ ...prev, hits: totalH, misses: totalM, skips: totalS }));
-    };
+                const avgRawScore = statsResults.reduce((acc, r) => acc + (r.score || 0), 0) / total;
+                const avgWeightedScore = avgRawScore * examWeightFactor;
+                const avgFinalScore = avgWeightedScore + meritPoints;
+           
+                const avgPct = statsResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / total;
+                const avgHits = statsResults.reduce((acc, r) => acc + r.hits, 0) / total;
+                const avgMisses = statsResults.reduce((acc, r) => acc + r.misses, 0) / total;
+                const avgSkips = statsResults.reduce((acc, r) => acc + r.skips, 0) / total;
+                const avgNetas = statsResults.reduce((acc, r) => acc + (r.hits - r.misses), 0) / total;
+                const avgGlobalHitRate = statsResults.reduce((acc, r) => acc + ((r.hits / r.total) * 100), 0) / total;
+                const avgTimeStr = formatTime(Math.round(statsResults.reduce((acc, r) => acc + (r.durationSeconds || 0), 0) / total));
+                const totalAnswered = statsResults.reduce((acc, r) => acc + (r.hits + r.misses), 0);
+                const totalSkipped = statsResults.reduce((acc, r) => acc + r.skips, 0);
 
-    const handleSaveManual = () => {
-        if (!activeSubject) return;
-        const hits = parseInt(manualData.hits) || 0; const misses = parseInt(manualData.misses) || 0; const skips = parseInt(manualData.skips) || 0;
-        const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
-        const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
-        const details = { sources: {}, topics: {} };
-        Object.entries(breakdownInputs).forEach(([topic, val]) => {
-            const h = val.h || 0; const m = val.m || 0; const s = val.s || 0;
-            if (h > 0 || m > 0 || s > 0) { details.topics[topic] = { h, m, s, t: h + m + s }; }
-        });
-        const newRecord = { date: new Date(manualData.date).toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0, hits, misses, skips, total: activeSubject.qCount, durationSeconds: parseInt(manualData.timeMinutes) * 60, details };
-        if (manualMode === 'create') onAddManual(newRecord); else onUpdateManual(editingIndex, newRecord);
-        setShowManual(false);
-    };
+                return { 
+                    total, avgRawScore, avgWeightedScore, avgFinalScore, meritPoints,
+                    avgPct, avgHits, avgMisses, avgSkips, avgNetas, avgGlobalHitRate, avgTimeStr, 
+                    totalAnswered, totalSkipped, isGlobal: true 
+                };
+            } else {
+                let sumRate = 0, totalAnswered = 0, totalSkipped = 0;
+                statsResults.forEach(r => { const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; if(det && det.t > 0) { sumRate += (det.h / det.t) * 100; totalAnswered += (det.h + det.m); totalSkipped += (det.s || 0); } });
+                return { total, avgVal: sumRate / total, totalAnswered, totalSkipped, label: 'Tasa Acierto Media', isPct: true, isGlobal: false };
+            }
+        }, [viewResults, viewMode, activeSubject]);
 
-    if (!activeSubject) return <div className="h-full flex items-center justify-center text-slate-500">Selecciona una materia primero.</div>;
+        const graphResults = useMemo(() => {
+            return viewMode === 'global' ? viewResults.filter(r => !r.isReinforcement) : viewResults;
+        }, [viewResults, viewMode]);
 
-    return (
-        <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 shrink-0 gap-4">
-                <div><h3 className="text-2xl font-display font-bold text-white">Historial: {activeSubject.name}</h3><div className="flex gap-2 mt-2 items-center"><input type="date" value={filterStart} onChange={e=>setFilterStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white text-xs p-1 rounded" /><span className="text-slate-500">-</span><input type="date" value={filterEnd} onChange={e=>setFilterEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white text-xs p-1 rounded" /></div></div>
-                <div className="flex gap-2 flex-wrap items-center"><div className="relative"><select value={viewMode} onChange={(e) => setViewMode(e.target.value)} className="appearance-none bg-slate-800 border border-blue-500 text-white text-xs font-bold py-2 pl-3 pr-8 rounded-lg focus:outline-none cursor-pointer"><option value="global">Vista Global (Todo el examen)</option>{availableFilters.sources.length > 0 && <optgroup label="Fuentes (PDFs / Convocatoria)">{availableFilters.sources.map(s => <option key={s} value={s}>{s}</option>)}</optgroup>}{availableFilters.topics.length > 0 && <optgroup label="Temas / Conceptos">{availableFilters.topics.map(t => <option key={t} value={t}>{t}</option>)}</optgroup>}</select><div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white"><Icons.Filter size={14} /></div></div><div className="w-px h-8 bg-slate-700 mx-2"></div><button onClick={() => openManualModal('create')} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.Edit3 size={16}/> MANUAL</button><button onClick={() => setShowGraph(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.BarChart3 size={16}/> GRÁFICA</button><button onClick={onClear} className="text-red-400 hover:text-red-300 flex items-center gap-2 text-sm font-bold px-4 py-2"><Icons.Trash2 size={16}/></button></div>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-20">
-                {stats && (<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {stats.isGlobal ? (
-                        <>
-                            <div className="glass-panel p-3 rounded-xl bg-green-900/20 border-green-500/30">
-                                <div className="text-[10px] text-green-500 uppercase font-bold tracking-widest mb-1">NOTA FINAL MEDIA</div>
-                                <div className="text-3xl font-display font-bold text-white leading-none mb-2">{stats.avgFinalScore.toFixed(2)}</div>
-                                <div className="flex flex-col text-[9px] text-slate-400 border-t border-green-500/20 pt-1">
-                                    <span>Puntos ({activeSubject.examWeight}%): <b className="text-green-200">{stats.avgWeightedScore.toFixed(2)}</b></span>
-                                    <span>Méritos: <b className="text-green-200">{stats.meritPoints.toFixed(2)}</b></span>
-                                </div>
-                            </div>
-                            <div className="glass-panel p-3 rounded-xl bg-indigo-900/20 border-indigo-500/30">
-                                <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest mb-1">MEDIA NETAS</div>
-                                <div className="text-3xl font-display font-bold text-white leading-none mb-2">{stats.avgNetas.toFixed(1)}</div>
-                                <div className="text-[9px] text-slate-400 border-t border-indigo-500/20 pt-1">
-                                    Puntos Brutos: <b className="text-indigo-200">{stats.avgRawScore.toFixed(2)}</b>
-                                </div>
-                            </div>
-                            <div className="glass-panel p-3 rounded-xl">
-                                <div className="text-xs text-slate-400 uppercase">Tasa Acierto</div>
-                                <div className={`text-2xl font-bold ${stats.avgGlobalHitRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>{stats.avgGlobalHitRate.toFixed(1)}%</div>
-                                <div className="text-[9px] text-slate-500 mt-1">Nota %: {stats.avgPct.toFixed(1)}%</div>
-                            </div>
-                            <div className="glass-panel p-3 rounded-xl flex flex-col justify-center">
-                                <div className="flex justify-between items-end mb-1">
-                                     <div className="text-xs text-slate-400 uppercase font-bold">Contestadas</div>
-                                     <div className="text-xs text-slate-500 uppercase">Media</div>
-                                </div>
-                                <div className="text-2xl font-bold text-white mb-1">{stats.totalAnswered.toLocaleString('es-ES')} <span className="text-sm font-normal text-slate-500">/ {stats.total} regs</span></div>
-                                <div className="flex justify-between items-center border-t border-slate-700 pt-2">
-                                     <div className="text-sm font-mono font-bold text-slate-300">{stats.avgTimeStr}</div>
-                                     <div className="text-[9px] text-slate-500 uppercase">Tiempo</div>
-                                </div>
-                            </div>
-                            <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-3 gap-2">
-                                <div className="text-center"><div className="text-[10px] text-green-500 uppercase">Aciertos</div><div className="text-lg font-bold text-white">{stats.avgHits.toFixed(1)}</div></div>
-                                <div className="text-center border-l border-slate-700"><div className="text-[10px] text-red-500 uppercase">Fallos</div><div className="text-lg font-bold text-white">{stats.avgMisses.toFixed(1)}</div></div>
-                                <div className="text-center border-l border-slate-700"><div className="text-[10px] text-blue-500 uppercase">Omitidas</div><div className="text-lg font-bold text-white">{stats.avgSkips.toFixed(1)}</div></div>
-                            </div>
+        const allPossibleTopics = useMemo(() => {
+            if (!activeSubject) return [];
+            const t = activeSubject.topics.map(t => t.name);
+            const f = activeSubject.files ? activeSubject.files.map(f => f.name) : [];
+            return [...t, ...f];
+        }, [activeSubject]);
 
-                            {/* BARRA TÉCNICA DE MEDIA CON SEPARADOR DE FASES */}
-                            <div className="glass-panel p-4 rounded-xl md:col-span-4">
-                                <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest flex items-center gap-2"><Icons.BarChart3 size={14}/> Posición Media en la Escala (Nota Final)</h4>
-                                <div className="relative h-6 bg-slate-800/50 rounded-lg border border-slate-700 overflow-visible mb-6">
-                                    {/* ESCALA NUMÉRICA CADA 40 */}
-                                    <div className="absolute inset-0 flex pointer-events-none">
-                                        {Array.from({ length: Math.floor((activeSubject.qCount * activeSubject.pointsHit) / 40) + 1 }).map((_, i) => (
-                                            <div key={i} className="absolute h-full border-l border-white/10" style={{ left: `${(i * 40 / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}>
-                                                <span className="absolute -bottom-6 -left-2 text-[8px] text-slate-500 font-bold font-mono">{i * 40}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    
-                                    {/* RELLENO BARRA - PARTE EXAMEN (AZUL) */}
-                                    <div className="absolute top-0 left-0 h-full bg-blue-600 rounded-l-lg z-10" style={{ width: `${(stats.avgWeightedScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
-                                    
-                                    {/* RELLENO BARRA - PARTE MÉRITOS (CYAN) + SEPARADOR */}
-                                    <div className="absolute top-0 h-full bg-cyan-500 z-10 border-l border-white/80" style={{ left: `${(stats.avgWeightedScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%`, width: `${(stats.meritPoints / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
-                                    
-                                    {/* ETIQUETA NOTA FINAL FLOTANTE AL FINAL DE LA BARRA */}
-                                    <div className="absolute top-0 h-full flex items-center z-30" style={{ left: `${Math.min(100, (stats.avgFinalScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100)}%`, transform: 'translateX(-100%)' }}>
-                                        <span className="text-[10px] font-black text-white drop-shadow-md whitespace-nowrap px-2">
-                                            {stats.avgFinalScore.toFixed(1)}
-                                        </span>
-                                    </div>
+        const openManualModal = (mode, data = null, idx = -1) => {
+            setManualMode(mode);
+            setBreakdownInputs({});
+            if (mode === 'edit' && data) { 
+                setManualData({ date: new Date(data.date).toISOString().slice(0,10), hits: data.hits, misses: data.misses, skips: data.skips || 0, timeMinutes: data.durationSeconds ? Math.round(data.durationSeconds / 60) : 0 }); 
+                setEditingIndex(idx); 
+            } else { 
+                setManualData({ date: new Date().toISOString().slice(0,10), hits: 0, misses: 0, skips: 0, timeMinutes: activeSubject ? activeSubject.timeMinutes : 0 }); 
+                const initialBreakdown = {};
+                allPossibleTopics.forEach(t => initialBreakdown[t] = { h: '', m: '', s: '' });
+                setBreakdownInputs(initialBreakdown);
+            }
+            setShowManual(true);
+        };
 
-                                    {/* RAYA VERDE: TECHO EXAMEN */}
-                                    <div className="absolute top-0 h-full w-0.5 bg-green-500 z-10 shadow-[0_0_8px_rgba(34,197,94,0.5)]" style={{ left: `${activeSubject.examWeight}%` }}></div>
-                                    
-                                    {/* RAYA LILA: CORTE */}
-                                    {activeSubject.lastCallCutoff > 0 && (
-                                        <div className="absolute top-0 h-full w-0.5 bg-purple-500 z-20 shadow-[0_0_8px_rgba(168,85,247,0.5)]" style={{ left: `${((activeSubject.lastCallCutoff || 0) / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="glass-panel p-3 rounded-xl md:col-span-4 flex items-center justify-between text-blue-300 text-xs font-bold px-4 border border-blue-500/30 bg-blue-900/10">
-                            <div className="flex items-center gap-2"><Icons.Filter size={16}/> Filtrando por: {viewMode}</div>
-                            <div className="text-xl">{stats.avgVal.toFixed(1)}% <span className="text-[10px] font-normal opacity-70">tasa acierto</span></div>
-                        </div>
-                    )}
-                </div>)}
-                
-                {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} setSubjects={setSubjects} onConsolidateHistory={executeConsolidation} />}
-                
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
-                            <tr>
-                                <th className="p-4">Fecha</th>
-                                <th className="p-4">Materia / Contexto</th>
-                                <th className="p-4 text-center">Puntos (Nota Final)</th>
-                                <th className="p-4 text-center">Nota %</th>
-                                <th className="p-4 text-center">Netas</th>
-                                <th className="p-4 text-center">Tiempo</th>
-                                <th className="p-4 text-center">Progreso</th>
-                                <th className="p-4 text-right">Detalle (A/F/O)</th>
-                                <th className="p-4 text-right">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800 text-slate-300">
-                            {viewResults.map((r, i) => { 
-                                let hits, misses, skips, total, netas, pctDisplay, timeStr, progressDisplay, pointsCell;
-                                const isReinf = r.isReinforcement;
+        const handleBreakdownChange = (topic, field, value) => {
+            const val = parseInt(value) || 0;
+            const newInputs = { ...breakdownInputs, [topic]: { ...breakdownInputs[topic], [field]: val } };
+            setBreakdownInputs(newInputs);
+            let totalH = 0, totalM = 0, totalS = 0;
+            Object.values(newInputs).forEach(v => { totalH += (v.h || 0); totalM += (v.m || 0); totalS += (v.s || 0); });
+            if (totalH > 0 || totalM > 0 || totalS > 0) setManualData(prev => ({ ...prev, hits: totalH, misses: totalM, skips: totalS }));
+        };
 
-                                if (viewMode === 'global') {
-                                    hits = r.hits; misses = r.misses; skips = r.skips; total = r.total; netas = hits - misses;
-                                    const safeExamWeight = Number(activeSubject.examWeight) || 90;
-                                    const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
-                                    const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
-                                    const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
+        const handleSaveManual = () => {
+            if (!activeSubject) return;
+            const hits = parseInt(manualData.hits) || 0; const misses = parseInt(manualData.misses) || 0; const skips = parseInt(manualData.skips) || 0;
+            const points = (hits * activeSubject.pointsHit) + (misses * activeSubject.pointsMiss) + (skips * activeSubject.pointsSkip);
+            const maxPoints = activeSubject.qCount * activeSubject.pointsHit;
+            const details = { sources: {}, topics: {} };
+            Object.entries(breakdownInputs).forEach(([topic, val]) => {
+                const h = val.h || 0; const m = val.m || 0; const s = val.s || 0;
+                if (h > 0 || m > 0 || s > 0) { details.topics[topic] = { h, m, s, t: h + m + s }; }
+            });
+            const newRecord = { date: new Date(manualData.date).toISOString(), subjectId: activeSubject.id, subjectName: activeSubject.name, score: points, percentage: maxPoints > 0 ? (points / maxPoints) * 100 : 0, hits, misses, skips, total: activeSubject.qCount, durationSeconds: parseInt(manualData.timeMinutes) * 60, details };
+            if (manualMode === 'create') onAddManual(newRecord); else onUpdateManual(editingIndex, newRecord);
+            setShowManual(false);
+        };
 
-                                    const rawPoints = r.score;
-                                    const weightedPoints = rawPoints * (safeExamWeight / 100);
-                                    const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
-                                    const finalScore = weightedPoints + meritPoints;
-                                
-                                 
-                                    pointsCell = isReinf ? (
-                                        <span className="text-[10px] text-yellow-500 font-bold bg-yellow-900/20 px-2 py-1 rounded border border-yellow-500/30">REFUERZO</span>
-                                    ) : (
-                                        <div className="flex flex-col items-center">
-                                            <span className="font-bold text-green-400 text-sm">{finalScore.toFixed(2)}</span>
-                                            <span className="text-[9px] text-slate-500">Ex({activeSubject.examWeight}%): {weightedPoints.toFixed(2)}</span>
-                                            <span className="text-[9px] text-slate-500">Méritos: {meritPoints.toFixed(2)}</span>
-                                        </div>
-                                    );
+        if (!activeSubject) return <div className="h-full flex items-center justify-center text-slate-500">Selecciona una materia primero.</div>;
 
-                                    pctDisplay = isReinf ? <span className="text-slate-600">--</span> : <span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span>; 
-                                    timeStr = r.durationSeconds ? formatTime(r.durationSeconds) : "--:--"; 
-                                    progressDisplay = <span className="text-xs text-slate-400">{hits+misses+skips} / {total} <span className="font-bold text-white">({(((hits+misses+skips)/total)*100).toFixed(1)}%)</span></span>; 
-                                } else { 
-                                    const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; 
-                                    hits = det.h; misses = det.m; skips = det.s || 0; total = det.t; netas = hits - misses;
-                                    pointsCell = <span className="text-slate-600">--</span>; 
-                                    pctDisplay = <span className="text-slate-600">--</span>; 
-                                    timeStr = <span className="text-slate-600">--</span>; 
-                                    progressDisplay = <span className="text-xs text-slate-400">Total: {total}</span>; 
-                                } 
-                                
-                                return (
-                                    <tr key={i} className={`hover:bg-slate-800/30 ${isReinf ? 'bg-yellow-900/5' : ''}`}>
-                                        <td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td>
-                                        <td className="p-4 font-bold text-white truncate max-w-[150px]">
-                                            {viewMode === 'global' ? r.subjectName : viewMode} 
-                                            {isReinf && <span className="text-[9px] text-yellow-500 ml-2 border border-yellow-500/50 px-1 rounded">REFUERZO</span>}
-                                        </td>
-                                        <td className="p-4 text-center">{pointsCell}</td>
-                                        <td className="p-4 text-center">{pctDisplay}</td>
-                                        <td className="p-4 text-center font-bold text-indigo-400">{netas}</td>
-                                        <td className="p-4 text-center font-mono text-slate-400">{timeStr}</td>
-                                        <td className="p-4 text-center">{progressDisplay}</td>
-                                        <td className="p-4 text-right text-xs font-mono">
-                                            <span className="text-green-400">{hits}</span> / <span className="text-red-400">{misses}</span> / <span className="text-blue-400">{skips}</span>
-                                        </td>
-                                        <td className="p-4 text-right flex justify-end gap-2">
-                                            {viewMode === 'global' && <button onClick={() => openManualModal('edit', r, r.originalIndex)} className="p-2 bg-slate-700 text-slate-300 rounded hover:bg-slate-600"><Icons.Edit3 size={16}/></button>}
-                                            <button onClick={() => onDeleteOne(r.originalIndex)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50"><Icons.Trash2 size={16}/></button>
-                                        </td>
-                                    </tr>
-                                ) 
-                            })} 
-                            {viewResults.length === 0 && <tr><td colSpan="9" className="p-8 text-center text-slate-500 italic">No hay datos para el filtro seleccionado.</td></tr>}
-                        </tbody>
-                    </table>
+        return (
+            <div className="h-full flex flex-col p-6 fade-in overflow-hidden">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 shrink-0 gap-4">
+                    <div><h3 className="text-2xl font-display font-bold text-white">Historial: {activeSubject.name}</h3><div className="flex gap-2 mt-2 items-center"><input type="date" value={filterStart} onChange={e=>setFilterStart(e.target.value)} className="bg-slate-900 border border-slate-700 text-white text-xs p-1 rounded" /><span className="text-slate-500">-</span><input type="date" value={filterEnd} onChange={e=>setFilterEnd(e.target.value)} className="bg-slate-900 border border-slate-700 text-white text-xs p-1 rounded" /></div></div>
+                    <div className="flex gap-2 flex-wrap items-center"><div className="relative"><select value={viewMode} onChange={(e) => setViewMode(e.target.value)} className="appearance-none bg-slate-800 border border-blue-500 text-white text-xs font-bold py-2 pl-3 pr-8 rounded-lg focus:outline-none cursor-pointer"><option value="global">Vista Global (Todo el examen)</option>{availableFilters.sources.length > 0 && <optgroup label="Fuentes (PDFs / Convocatoria)">{availableFilters.sources.map(s => <option key={s} value={s}>{s}</option>)}</optgroup>}{availableFilters.topics.length > 0 && <optgroup label="Temas / Conceptos">{availableFilters.topics.map(t => <option key={t} value={t}>{t}</option>)}</optgroup>}</select><div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white"><Icons.Filter size={14} /></div></div><div className="w-px h-8 bg-slate-700 mx-2"></div><button onClick={() => openManualModal('create')} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.Edit3 size={16}/> MANUAL</button><button onClick={() => setShowGraph(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Icons.BarChart3 size={16}/> GRÁFICA</button><button onClick={onClear} className="text-red-400 hover:text-red-300 flex items-center gap-2 text-sm font-bold px-4 py-2"><Icons.Trash2 size={16}/></button></div>
                 </div>
-            </div>
-            {showGraph && (<div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 fade-in" onClick={() => setShowGraph(false)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl h-[500px] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.BarChart3 size={24} className="text-blue-500"/> Evolución: {viewMode === 'global' ? 'Nota Final (Concurso-Oposición)' : viewMode}</h3><button onClick={() => setShowGraph(false)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div><div className="flex-1 overflow-x-auto custom-scrollbar border border-slate-800 rounded-lg bg-black/30 p-4 relative">{graphResults.length > 0 ? (<div style={{minWidth: `${Math.max(600, graphResults.length * 60)}px`, height: '100%', position: 'relative'}}><svg width="100%" height="100%" viewBox={`0 0 ${Math.max(600, graphResults.length * 60)} 400`} preserveAspectRatio="none">{(() => { 
-                if (viewMode === 'global') { 
-                    const maxRaw = activeSubject ? (activeSubject.qCount * activeSubject.pointsHit) : 600;
-                    const totalGraphMax = maxRaw; 
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-20">
+                    {stats && (<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {stats.isGlobal ? (
+                            <>
+                                <div className="glass-panel p-3 rounded-xl bg-green-900/20 border-green-500/30">
+                                    <div className="text-[10px] text-green-500 uppercase font-bold tracking-widest mb-1">NOTA FINAL MEDIA</div>
+                                    <div className="text-3xl font-display font-bold text-white leading-none mb-2">{stats.avgFinalScore.toFixed(2)}</div>
+                                    <div className="flex flex-col text-[9px] text-slate-400 border-t border-green-500/20 pt-1">
+                                        <span>Puntos ({activeSubject.examWeight}%): <b className="text-green-200">{stats.avgWeightedScore.toFixed(2)}</b></span>
+                                        <span>Méritos: <b className="text-green-200">{stats.meritPoints.toFixed(2)}</b></span>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-3 rounded-xl bg-indigo-900/20 border-indigo-500/30">
+                                    <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest mb-1">MEDIA NETAS</div>
+                                    <div className="text-3xl font-display font-bold text-white leading-none mb-2">{stats.avgNetas.toFixed(1)}</div>
+                                    <div className="text-[9px] text-slate-400 border-t border-indigo-500/20 pt-1">
+                                        Puntos Brutos: <b className="text-indigo-200">{stats.avgRawScore.toFixed(2)}</b>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-3 rounded-xl">
+                                    <div className="text-xs text-slate-400 uppercase">Tasa Acierto</div>
+                                    <div className={`text-2xl font-bold ${stats.avgGlobalHitRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>{stats.avgGlobalHitRate.toFixed(1)}%</div>
+                                    <div className="text-[9px] text-slate-500 mt-1">Nota %: {stats.avgPct.toFixed(1)}%</div>
+                                </div>
+                                <div className="glass-panel p-3 rounded-xl flex flex-col justify-center">
+                                    <div className="flex justify-between items-end mb-1">
+                                         <div className="text-xs text-slate-400 uppercase font-bold">Contestadas</div>
+                                         <div className="text-xs text-slate-500 uppercase">Media</div>
+                                    </div>
+                                    <div className="text-2xl font-bold text-white mb-1">{stats.totalAnswered.toLocaleString('es-ES')} <span className="text-sm font-normal text-slate-500">/ {stats.total} regs</span></div>
+                                    <div className="flex justify-between items-center border-t border-slate-700 pt-2">
+                                         <div className="text-sm font-mono font-bold text-slate-300">{stats.avgTimeStr}</div>
+                                         <div className="text-[9px] text-slate-500 uppercase">Tiempo</div>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-3 rounded-xl md:col-span-4 grid grid-cols-3 gap-2">
+                                    <div className="text-center"><div className="text-[10px] text-green-500 uppercase">Aciertos</div><div className="text-lg font-bold text-white">{stats.avgHits.toFixed(1)}</div></div>
+                                    <div className="text-center border-l border-slate-700"><div className="text-[10px] text-red-500 uppercase">Fallos</div><div className="text-lg font-bold text-white">{stats.avgMisses.toFixed(1)}</div></div>
+                                    <div className="text-center border-l border-slate-700"><div className="text-[10px] text-blue-500 uppercase">Omitidas</div><div className="text-lg font-bold text-white">{stats.avgSkips.toFixed(1)}</div></div>
+                                </div>
+
+                                <div className="glass-panel p-4 rounded-xl md:col-span-4">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest flex items-center gap-2"><Icons.BarChart3 size={14}/> Posición Media en la Escala (Nota Final)</h4>
+                                    <div className="relative h-6 bg-slate-800/50 rounded-lg border border-slate-700 overflow-visible mb-6">
+                                        <div className="absolute inset-0 flex pointer-events-none">
+                                            {Array.from({ length: Math.floor((activeSubject.qCount * activeSubject.pointsHit) / 40) + 1 }).map((_, i) => (
+                                                <div key={i} className="absolute h-full border-l border-white/10" style={{ left: `${(i * 40 / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}>
+                                                    <span className="absolute -bottom-6 -left-2 text-[8px] text-slate-500 font-bold font-mono">{i * 40}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <div className="absolute top-0 left-0 h-full bg-blue-600 rounded-l-lg z-10" style={{ width: `${(stats.avgWeightedScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
+                                        <div className="absolute top-0 h-full bg-cyan-500 z-10 border-l border-white/80" style={{ left: `${(stats.avgWeightedScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%`, width: `${(stats.meritPoints / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
+                                        
+                                        <div className="absolute top-0 h-full flex items-center z-30" style={{ left: `${Math.min(100, (stats.avgFinalScore / (activeSubject.qCount * activeSubject.pointsHit)) * 100)}%`, transform: 'translateX(-100%)' }}>
+                                            <span className="text-[10px] font-black text-white drop-shadow-md whitespace-nowrap px-2">
+                                                {stats.avgFinalScore.toFixed(1)}
+                                            </span>
+                                        </div>
+
+                                        <div className="absolute top-0 h-full w-0.5 bg-green-500 z-10 shadow-[0_0_8px_rgba(34,197,94,0.5)]" style={{ left: `${activeSubject.examWeight}%` }}></div>
+                                        {activeSubject.lastCallCutoff > 0 && (
+                                            <div className="absolute top-0 h-full w-0.5 bg-purple-500 z-20 shadow-[0_0_8px_rgba(168,85,247,0.5)]" style={{ left: `${((activeSubject.lastCallCutoff || 0) / (activeSubject.qCount * activeSubject.pointsHit)) * 100}%` }}></div>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="glass-panel p-3 rounded-xl md:col-span-4 flex items-center justify-between text-blue-300 text-xs font-bold px-4 border border-blue-500/30 bg-blue-900/10">
+                                <div className="flex items-center gap-2"><Icons.Filter size={16}/> Filtrando por: {viewMode}</div>
+                                <div className="text-xl">{stats.avgVal.toFixed(1)}% <span className="text-[10px] font-normal opacity-70">tasa acierto</span></div>
+                            </div>
+                        )}
+                    </div>)}
                     
-                    const ceilingExam = maxRaw * ((activeSubject.examWeight||90)/100);
-                    const cutOffVal = activeSubject.lastCallCutoff || 0;
-                    const avgVal = stats.avgFinalScore;
-
-                    const gridLines = []; 
-                    for(let i = 0; i <= totalGraphMax; i += 40) { 
-                        const y = 380 - (i / totalGraphMax) * 360; 
-                        gridLines.push(<g key={i}><line x1="40" y1={y} x2="100%" y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" /><text x="35" y={y + 3} textAnchor="end" fill="#64748B" fontSize="10">{i}</text></g>); 
-                    } 
+                    {viewMode === 'global' && <AIAnalysis results={filteredResults} activeSubject={activeSubject} setSubjects={setSubjects} onConsolidateHistory={executeConsolidation} />}
                     
-                    const greenY = 380 - (ceilingExam / totalGraphMax) * 360;
-                    const purpleY = 380 - (cutOffVal / totalGraphMax) * 360;
-                    const yellowY = 380 - (avgVal / totalGraphMax) * 360;
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
+                                <tr>
+                                    <th className="p-4">Fecha</th>
+                                    <th className="p-4">Materia / Contexto</th>
+                                    <th className="p-4 text-center">Puntos (Nota Final)</th>
+                                    <th className="p-4 text-center">Nota %</th>
+                                    <th className="p-4 text-center">Netas</th>
+                                    <th className="p-4 text-center">Tiempo</th>
+                                    <th className="p-4 text-center">Progreso</th>
+                                    <th className="p-4 text-right">Detalle (A/F/O)</th>
+                                    <th className="p-4 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 text-slate-300">
+                                {viewResults.map((r, i) => { 
+                                    let hits, misses, skips, total, netas, pctDisplay, timeStr, progressDisplay, pointsCell;
+                                    const isReinf = r.isReinforcement;
 
-                    return (<React.Fragment key="graph-global">
-                        {gridLines}
-                        <line x1="40" y1="380" x2="100%" y2="380" stroke="#475569" strokeWidth="2" />
-                        <line x1="40" y1="20" x2="40" y2="380" stroke="#475569" strokeWidth="2" />
-                        
-                        <line x1="40" y1={greenY} x2="100%" y2={greenY} stroke="#22c55e" strokeWidth="2" strokeDasharray="5,5" />
-                        <text x="100%" y={greenY - 5} textAnchor="end" fill="#22c55e" fontSize="10" fontWeight="bold" dx="-10">TECHO EXAMEN</text>
-                        
-                        {cutOffVal > 0 && <>
-                            <line x1="40" y1={purpleY} x2="100%" y2={purpleY} stroke="#a855f7" strokeWidth="2" />
-                            <text x="100%" y={purpleY - 5} textAnchor="end" fill="#a855f7" fontSize="10" fontWeight="bold" dx="-10">CORTE OBJETIVO</text>
-                        </>}
-                        
-                        <line x1="40" y1={yellowY} x2="100%" y2={yellowY} stroke="#eab308" strokeWidth="2" strokeDasharray="2,2" />
-                        <text x="100%" y={yellowY - 5} textAnchor="end" fill="#eab308" fontSize="10" fontWeight="bold" dx="-10">MEDIA ACTUAL</text>
+                                    if (viewMode === 'global') {
+                                        hits = r.hits; misses = r.misses; skips = r.skips; total = r.total; netas = hits - misses;
+                                        const safeExamWeight = Number(activeSubject.examWeight) || 90;
+                                        const safeDegreeGrade = Number(activeSubject.degreeGrade) || 5;
+                                        const safeDegreeWeight = Number(activeSubject.degreeWeight) || 6;
+                                        const safeExtraPoints = Number(activeSubject.extraPoints) || 0;
 
-                        {graphResults.slice().reverse().map((h, i) => { 
-                            const rawPoints = h.score;
-                            const examPart = rawPoints * ((activeSubject.examWeight||90)/100);
-                            const meritPart = ((activeSubject.degreeGrade||5)*(activeSubject.degreeWeight||6)) + (activeSubject.extraPoints||0);
-                            const totalScore = examPart + meritPart;
+                                        const rawPoints = r.score;
+                                        const weightedPoints = rawPoints * (safeExamWeight / 100);
+                                        const meritPoints = (safeDegreeGrade * safeDegreeWeight) + safeExtraPoints;
+                                        const finalScore = weightedPoints + meritPoints;
+                                    
+                                        pointsCell = isReinf ? (
+                                            <span className="text-[10px] text-yellow-500 font-bold bg-yellow-900/20 px-2 py-1 rounded border border-yellow-500/30">REFUERZO</span>
+                                        ) : (
+                                            <div className="flex flex-col items-center">
+                                                <span className="font-bold text-green-400 text-sm">{finalScore.toFixed(2)}</span>
+                                                <span className="text-[9px] text-slate-500">Ex({activeSubject.examWeight}%): {weightedPoints.toFixed(2)}</span>
+                                                <span className="text-[9px] text-slate-500">Méritos: {meritPoints.toFixed(2)}</span>
+                                            </div>
+                                        );
 
-                            const barHeightExam = (examPart / totalGraphMax) * 360;
-                            const barHeightMerit = (meritPart / totalGraphMax) * 360;
+                                        pctDisplay = isReinf ? <span className="text-slate-600">--</span> : <span className={`px-2 py-1 rounded text-xs font-bold ${r.percentage>=50?'bg-green-900/30 text-green-400':'bg-red-900/30 text-red-400'}`}>{r.percentage.toFixed(1)}%</span>; 
+                                        timeStr = r.durationSeconds ? formatTime(r.durationSeconds) : "--:--"; 
+                                        progressDisplay = <span className="text-xs text-slate-400">{hits+misses+skips} / {total} <span className="font-bold text-white">({(((hits+misses+skips)/total)*100).toFixed(1)}%)</span></span>; 
+                                    } else { 
+                                        const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; 
+                                        hits = det.h; misses = det.m; skips = det.s || 0; total = det.t; netas = hits - misses;
+                                        pointsCell = <span className="text-slate-600">--</span>; 
+                                        pctDisplay = <span className="text-slate-600">--</span>; 
+                                        timeStr = <span className="text-slate-600">--</span>; 
+                                        progressDisplay = <span className="text-xs text-slate-400">Total: {total}</span>; 
+                                    } 
+                                    
+                                    return (
+                                        <tr key={i} className={`hover:bg-slate-800/30 ${isReinf ? 'bg-yellow-900/5' : ''}`}>
+                                            <td className="p-4 text-sm font-mono">{new Date(r.date).toLocaleDateString()}</td>
+                                            <td className="p-4 font-bold text-white truncate max-w-[150px]">
+                                                {viewMode === 'global' ? r.subjectName : viewMode} 
+                                                {isReinf && <span className="text-[9px] text-yellow-500 ml-2 border border-yellow-500/50 px-1 rounded">REFUERZO</span>}
+                                            </td>
+                                            <td className="p-4 text-center">{pointsCell}</td>
+                                            <td className="p-4 text-center">{pctDisplay}</td>
+                                            <td className="p-4 text-center font-bold text-indigo-400">{netas}</td>
+                                            <td className="p-4 text-center font-mono text-slate-400">{timeStr}</td>
+                                            <td className="p-4 text-center">{progressDisplay}</td>
+                                            <td className="p-4 text-right text-xs font-mono">
+                                                <span className="text-green-400">{hits}</span> / <span className="text-red-400">{misses}</span> / <span className="text-blue-400">{skips}</span>
+                                            </td>
+                                            <td className="p-4 text-right flex justify-end gap-2">
+                                                {viewMode === 'global' && <button onClick={() => openManualModal('edit', r, r.originalIndex)} className="p-2 bg-slate-700 text-slate-300 rounded hover:bg-slate-600"><Icons.Edit3 size={16}/></button>}
+                                                <button onClick={() => onDeleteOne(r.originalIndex)} className="p-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/50"><Icons.Trash2 size={16}/></button>
+                                            </td>
+                                        </tr>
+                                    ) 
+                                })} 
+                                {viewResults.length === 0 && <tr><td colSpan="9" className="p-8 text-center text-slate-500 italic">No hay datos para el filtro seleccionado.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {showGraph && (<div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 fade-in" onClick={() => setShowGraph(false)}><div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl h-[500px] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.BarChart3 size={24} className="text-blue-500"/> Evolución: {viewMode === 'global' ? 'Nota Final' : viewMode}</h3><button onClick={() => setShowGraph(false)} className="text-slate-400 hover:text-white"><Icons.XCircle size={24}/></button></div><div className="flex-1 overflow-x-auto custom-scrollbar border border-slate-800 rounded-lg bg-black/30 p-4 relative">{graphResults.length > 0 ? (<div style={{minWidth: `${Math.max(600, graphResults.length * 60)}px`, height: '100%', position: 'relative'}}><svg width="100%" height="100%" viewBox={`0 0 ${Math.max(600, graphResults.length * 60)} 400`} preserveAspectRatio="none">{(() => { 
+                    if (viewMode === 'global') { 
+                        const maxRaw = activeSubject ? (activeSubject.qCount * activeSubject.pointsHit) : 600;
+                        const totalGraphMax = maxRaw; 
+                        
+                        const ceilingExam = maxRaw * ((activeSubject.examWeight||90)/100);
+                        const cutOffVal = activeSubject.lastCallCutoff || 0;
+                        const avgVal = stats.avgFinalScore;
+
+                        const gridLines = []; 
+                        for(let i = 0; i <= totalGraphMax; i += 40) { 
+                            const y = 380 - (i / totalGraphMax) * 360; 
+                            gridLines.push(<g key={i}><line x1="40" y1={y} x2="100%" y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" /><text x="35" y={y + 3} textAnchor="end" fill="#64748B" fontSize="10">{i}</text></g>); 
+                        } 
+                        
+                        const greenY = 380 - (ceilingExam / totalGraphMax) * 360;
+                        const purpleY = 380 - (cutOffVal / totalGraphMax) * 360;
+                        const yellowY = 380 - (avgVal / totalGraphMax) * 360;
+
+                        return (<React.Fragment key="graph-global">
+                            {gridLines}
+                            <line x1="40" y1="380" x2="100%" y2="380" stroke="#475569" strokeWidth="2" />
+                            <line x1="40" y1="20" x2="40" y2="380" stroke="#475569" strokeWidth="2" />
                             
-                            const x = 60 + (i * 60); 
-                            const yBase = 380;
-                            const yExamTop = yBase - barHeightExam;
-                            const yTotalTop = yExamTop - barHeightMerit;
+                            <line x1="40" y1={greenY} x2="100%" y2={greenY} stroke="#22c55e" strokeWidth="2" strokeDasharray="5,5" />
+                            <text x="100%" y={greenY - 5} textAnchor="end" fill="#22c55e" fontSize="10" fontWeight="bold" dx="-10">TECHO EXAMEN</text>
+                            
+                            {cutOffVal > 0 && <>
+                                <line x1="40" y1={purpleY} x2="100%" y2={purpleY} stroke="#a855f7" strokeWidth="2" />
+                                <text x="100%" y={purpleY - 5} textAnchor="end" fill="#a855f7" fontSize="10" fontWeight="bold" dx="-10">CORTE OBJETIVO</text>
+                            </>}
+                            
+                            <line x1="40" y1={yellowY} x2="100%" y2={yellowY} stroke="#eab308" strokeWidth="2" strokeDasharray="2,2" />
+                            <text x="100%" y={yellowY - 5} textAnchor="end" fill="#eab308" fontSize="10" fontWeight="bold" dx="-10">MEDIA ACTUAL</text>
 
-                            return (<g key={i}>
-                                <rect x={x} y={yExamTop} width="40" height={Math.max(0, barHeightExam)} fill="#2563eb" rx="2" />
-                                <rect x={x} y={yTotalTop} width="40" height={Math.max(0, barHeightMerit)} fill="#22d3ee" rx="2" />
-                                <text x={x + 20} y={yTotalTop - 10} textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">{totalScore.toFixed(1)}</text>
-                                <text x={x + 20} y={395} textAnchor="middle" fill="#94A3B8" fontSize="10">{new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})}</text>
-                            </g>); 
-                        })}
-                    </React.Fragment>); 
-                } else { 
-                    const gridLines = []; for(let i=0; i<=100; i+=20) { const y = 380 - (i/100)*360; gridLines.push(<g key={i}><line x1="40" y1={y} x2="100%" y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4,4" opacity="0.3"/><text x="35" y={y+3} textAnchor="end" fill="#64748B" fontSize="10">{i}</text></g>); } 
-                    return (<React.Fragment key="graph-details">{gridLines}<line x1="40" y1="380" x2="100%" y2="380" stroke="#475569" strokeWidth="2"/><line x1="40" y1="20" x2="40" y2="380" stroke="#475569" strokeWidth="2"/><text x="100%" y={190} textAnchor="end" fill="#22c55e" fontSize="10" fontWeight="bold" dx="-10">50%</text>{graphResults.slice().reverse().map((r, i) => { const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; const val = det.t > 0 ? (det.h / det.t) * 100 : 0; const barHeight = (val/100)*360; const x=60+(i*60); const y=380-barHeight; return (<g key={i}><rect x={x} y={y} width="40" height={Math.max(0, barHeight)} fill={val>=50 ? "#22c55e" : "#ef4444"} rx="4"/><text x={x+20} y={y-10} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{val.toFixed(0)}%</text><text x={x+20} y={395} textAnchor="middle" fill="#94A3B8" fontSize="10">{new Date(r.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})}</text></g>); })}</React.Fragment>); 
-                } })()}</svg></div>) : <div className="text-center text-slate-500 mt-20">No hay datos suficientes con el filtro actual</div>}</div></div></div>)}
-            {showManual && (<div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 fade-in"><div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col"><h3 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4 shrink-0">{manualMode === 'create' ? 'Nuevo Registro' : 'Editar Registro'}</h3><div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-2"><div className="space-y-4"><div><label className="block text-xs text-slate-400 mb-1">Fecha</label><input type="date" value={manualData.date} onChange={e=>setManualData({...manualData, date: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white" /></div><div><label className="block text-xs text-slate-400 mb-1">Tiempo (Minutos)</label><input type="number" value={manualData.timeMinutes} onChange={e=>setManualData({...manualData, timeMinutes: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-mono" /></div><div className="grid grid-cols-3 gap-4"><div><label className="block text-xs text-green-400 mb-1 font-bold">Total Aciertos</label><input type="number" value={manualData.hits} onChange={e=>setManualData({...manualData, hits: e.target.value})} className="w-full bg-slate-800 border border-green-900 rounded p-2 text-green-400 font-bold" /></div><div><label className="block text-xs text-red-400 mb-1 font-bold">Total Fallos</label><input type="number" value={manualData.misses} onChange={e=>setManualData({...manualData, misses: e.target.value})} className="w-full bg-slate-800 border border-red-900 rounded p-2 text-red-400 font-bold" /></div><div><label className="block text-xs text-blue-400 mb-1 font-bold">Total Omitidas</label><input type="number" value={manualData.skips} onChange={e=>setManualData({...manualData, skips: e.target.value})} className="w-full bg-slate-800 border border-blue-900 rounded p-2 text-blue-400 font-bold" /></div></div></div>{allPossibleTopics.length > 0 && manualMode === 'create' && (<div className="border-t border-slate-700 pt-4"><h4 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center justify-between"><span>Desglose por Temas</span><span className="text-[9px] text-slate-500 font-normal normal-case">Se suman al total automáticamente</span></h4><div className="space-y-2">{allPossibleTopics.map((topic, i) => (<div key={i} className="flex items-center gap-2 bg-slate-800/30 p-2 rounded"><span className="flex-1 text-[10px] text-white truncate" title={topic}>{topic}</span><input type="number" placeholder="Ac" className="w-10 bg-black border border-green-900/50 rounded p-1 text-right text-green-400 text-xs" onChange={e => handleBreakdownChange(topic, 'h', e.target.value)} /><input type="number" placeholder="Fa" className="w-10 bg-black border border-red-900/50 rounded p-1 text-right text-red-400 text-xs" onChange={e => handleBreakdownChange(topic, 'm', e.target.value)} /><input type="number" placeholder="Om" className="w-10 bg-black border border-blue-900/50 rounded p-1 text-right text-blue-400 text-xs" onChange={e => handleBreakdownChange(topic, 's', e.target.value)} /></div>))}</div></div>)}</div><div className="flex gap-4 mt-6 shrink-0 pt-4 border-t border-slate-800"><button onClick={() => setShowManual(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSaveManual} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar</button></div></div></div>)}
-        </div>
-    );
-};
+                            {graphResults.slice().reverse().map((h, i) => { 
+                                const rawPoints = h.score;
+                                const examPart = rawPoints * ((activeSubject.examWeight||90)/100);
+                                const meritPart = ((activeSubject.degreeGrade||5)*(activeSubject.degreeWeight||6)) + (activeSubject.extraPoints||0);
+                                const totalScore = examPart + meritPart;
 
+                                const barHeightExam = (examPart / totalGraphMax) * 360;
+                                const barHeightMerit = (meritPart / totalGraphMax) * 360;
+                                
+                                const x = 60 + (i * 60); 
+                                const yBase = 380;
+                                const yExamTop = yBase - barHeightExam;
+                                const yTotalTop = yExamTop - barHeightMerit;
 
-      const App = () => {
-          const [activeTab, setActiveTab] = useState('subjects');
-          const [subjects, setSubjects] = usePersistentState('boardinggate_subjects', []);
-          const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
-          const [history, setHistory] = usePersistentState('boardinggate_history', []);
-          const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); 
-          const [tc, setTc] = usePersistentState('bg_app_tc_st', 0); 
-          const [isRegistered, setIsRegistered] = usePersistentState('bg_is_registered', false);
-          const [examSession, setExamSession] = useState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
-          const isAuth=isRegistered||_0x7a2(rk),trialExhausted=tc>=10,handleActivate=v=>{if(_0x7a2(v)){setRk(v);setIsRegistered(!0)}else if(isRegistered){setRk('');setIsRegistered(!1);setTc(0)}};
-          const handleUpdateManualHistory = (index, updatedRecord) => { setHistory(prev => { const newHistory = [...prev]; newHistory[index] = updatedRecord; return newHistory; }); };
-          const activeSubject = subjects.find(s => s.id === activeSubjectId);
+                                return (<g key={i}>
+                                    <rect x={x} y={yExamTop} width="40" height={Math.max(0, barHeightExam)} fill="#2563eb" rx="2" />
+                                    <rect x={x} y={yTotalTop} width="40" height={Math.max(0, barHeightMerit)} fill="#22d3ee" rx="2" />
+                                    <text x={x + 20} y={yTotalTop - 10} textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">{totalScore.toFixed(1)}</text>
+                                    <text x={x + 20} y={395} textAnchor="middle" fill="#94A3B8" fontSize="10">{new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})}</text>
+                                </g>); 
+                            })}
+                        </React.Fragment>); 
+                    } else { 
+                        const gridLines = []; for(let i=0; i<=100; i+=20) { const y = 380 - (i/100)*360; gridLines.push(<g key={i}><line x1="40" y1={y} x2="100%" y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4,4" opacity="0.3"/><text x="35" y={y+3} textAnchor="end" fill="#64748B" fontSize="10">{i}</text></g>); } 
+                        return (<React.Fragment key="graph-details">{gridLines}<line x1="40" y1="380" x2="100%" y2="380" stroke="#475569" strokeWidth="2"/><line x1="40" y1="20" x2="40" y2="380" stroke="#475569" strokeWidth="2"/><text x="100%" y={190} textAnchor="end" fill="#22c55e" fontSize="10" fontWeight="bold" dx="-10">50%</text>{graphResults.slice().reverse().map((r, i) => { const det = r.details.sources?.[viewMode] || r.details.topics?.[viewMode]; const val = det.t > 0 ? (det.h / det.t) * 100 : 0; const barHeight = (val/100)*360; const x=60+(i*60); const y=380-barHeight; return (<g key={i}><rect x={x} y={y} width="40" height={Math.max(0, barHeight)} fill={val>=50 ? "#22c55e" : "#ef4444"} rx="4"/><text x={x+20} y={y-10} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{val.toFixed(0)}%</text><text x={x+20} y={395} textAnchor="middle" fill="#94A3B8" fontSize="10">{new Date(r.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})}</text></g>); })}</React.Fragment>); 
+                    } })()}</svg></div>) : <div className="text-center text-slate-500 mt-20">No hay datos suficientes con el filtro actual</div>}</div></div></div>)}
+                {showManual && (<div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 fade-in"><div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col"><h3 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4 shrink-0">{manualMode === 'create' ? 'Nuevo Registro' : 'Editar Registro'}</h3><div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-2"><div className="space-y-4"><div><label className="block text-xs text-slate-400 mb-1">Fecha</label><input type="date" value={manualData.date} onChange={e=>setManualData({...manualData, date: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white" /></div><div><label className="block text-xs text-slate-400 mb-1">Tiempo (Minutos)</label><input type="number" value={manualData.timeMinutes} onChange={e=>setManualData({...manualData, timeMinutes: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-mono" /></div><div className="grid grid-cols-3 gap-4"><div><label className="block text-xs text-green-400 mb-1 font-bold">Total Aciertos</label><input type="number" value={manualData.hits} onChange={e=>setManualData({...manualData, hits: e.target.value})} className="w-full bg-slate-800 border border-green-900 rounded p-2 text-green-400 font-bold" /></div><div><label className="block text-xs text-red-400 mb-1 font-bold">Total Fallos</label><input type="number" value={manualData.misses} onChange={e=>setManualData({...manualData, misses: e.target.value})} className="w-full bg-slate-800 border border-red-900 rounded p-2 text-red-400 font-bold" /></div><div><label className="block text-xs text-blue-400 mb-1 font-bold">Total Omitidas</label><input type="number" value={manualData.skips} onChange={e=>setManualData({...manualData, skips: e.target.value})} className="w-full bg-slate-800 border border-blue-900 rounded p-2 text-blue-400 font-bold" /></div></div></div>{allPossibleTopics.length > 0 && manualMode === 'create' && (<div className="border-t border-slate-700 pt-4"><h4 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center justify-between"><span>Desglose por Temas</span><span className="text-[9px] text-slate-500 font-normal normal-case">Se suman al total automáticamente</span></h4><div className="space-y-2">{allPossibleTopics.map((topic, i) => (<div key={i} className="flex items-center gap-2 bg-slate-800/30 p-2 rounded"><span className="flex-1 text-[10px] text-white truncate" title={topic}>{topic}</span><input type="number" placeholder="Ac" className="w-10 bg-black border border-green-900/50 rounded p-1 text-right text-green-400 text-xs" onChange={e => handleBreakdownChange(topic, 'h', e.target.value)} /><input type="number" placeholder="Fa" className="w-10 bg-black border border-red-900/50 rounded p-1 text-right text-red-400 text-xs" onChange={e => handleBreakdownChange(topic, 'm', e.target.value)} /><input type="number" placeholder="Om" className="w-10 bg-black border border-blue-900/50 rounded p-1 text-right text-blue-400 text-xs" onChange={e => handleBreakdownChange(topic, 's', e.target.value)} /></div>))}</div></div>)}</div><div className="flex gap-4 mt-6 shrink-0 pt-4 border-t border-slate-800"><button onClick={() => setShowManual(false)} className="flex-1 py-3 bg-slate-800 rounded-xl text-slate-300 font-bold">Cancelar</button><button onClick={handleSaveManual} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-bold">Guardar</button></div></div></div>)}
+            </div>
+        );
+    };
 
-          return (
-              <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
-                  <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
-                      <div><h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight"><span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">Simulador Oposiciones AI</p></div>
-                      <nav className="flex bg-slate-800 rounded-lg p-1 gap-1">
-                          <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.BookOpen size={16}/> <span className="hidden md:inline">Materias</span></button>
-                          <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Play size={16}/> <span className="hidden md:inline">Examen</span></button>
-                          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Clock size={16}/> <span className="hidden md:inline">Histórico</span></button>
-                          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
-                      </nav>
-                  </header>
+    const App = () => {
+        const [activeTab, setActiveTab] = useState('subjects');
+        const [subjects, setSubjects] = usePersistentState('boardinggate_subjects', []);
+        const [activeSubjectId, setActiveSubjectId] = usePersistentState('boardinggate_active_sub', null);
+        const [history, setHistory] = usePersistentState('boardinggate_history', []);
+        const [rk, setRk] = usePersistentState('bg_app_rk_st', ''); 
+        const [tc, setTc] = usePersistentState('bg_app_tc_st', 0); 
+        const [isRegistered, setIsRegistered] = usePersistentState('bg_is_registered', false);
+        const [examSession, setExamSession] = useState({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null });
+        const [isLastPromptModalOpen, setIsLastPromptModalOpen] = useState(false);
 
-                  <main className="flex-1 overflow-hidden relative">
-                      {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
-                      {activeTab === 'exam' && (
-                          (!isAuth && trialExhausted) ? (
-                              <div className="h-full flex flex-col items-center justify-center p-6 text-center fade-in">
-                                  <div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl">
-                                      <div className="inline-flex p-4 bg-red-500/10 text-red-500 rounded-full mb-6"><Icons.AlertTriangle size={48} /></div>
-                                      <h2 className="text-2xl font-display font-bold text-white mb-4 uppercase">PRUEBA FINALIZADA</h2>
-                                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">Has completado tus 10 sesiones de cortesía.</p>
-                                      <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg">INTRODUCIR REGISTRO</button>
-                                  </div>
-                              </div>
-                          ) : (
-                              <ExamTab activeSubject={activeSubject} session={examSession} setSession={setExamSession} isAuth={isAuth} trialCount={tc} setTc={setTc}
-                                  onSaveResult={(r)=>{ setHistory(prev=>[r,...prev]); setActiveTab('history'); setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null }); }} 
-                              />
-                          )
-                      )}
-                      {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} activeSubject={activeSubject} onAddManual={(r)=>setHistory(prev=>[r,...prev])} onUpdateManual={handleUpdateManualHistory} setSubjects={setSubjects} setHistory={setHistory} />}
-                      {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
-                  </main>
-              </div>
-          );
-      };
+        const isAuth=isRegistered||_0x7a2(rk),trialExhausted=tc>=10,handleActivate=v=>{if(_0x7a2(v)){setRk(v);setIsRegistered(!0)}else if(isRegistered){setRk('');setIsRegistered(!1);setTc(0)}};
+        const handleUpdateManualHistory = (index, updatedRecord) => { setHistory(prev => { const newHistory = [...prev]; newHistory[index] = updatedRecord; return newHistory; }); };
+        const activeSubject = subjects.find(s => s.id === activeSubjectId);
 
-      createRoot(document.getElementById('root')).render(<App />);
+        useEffect(() => {
+            window.openPromptModal = () => setIsLastPromptModalOpen(true);
+            return () => { delete window.openPromptModal; };
+        }, []);
+
+        return (
+            <div className="h-full flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
+                <header className="shrink-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-2xl z-20">
+                    <div><h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight"><span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Boarding</span><span className="text-blue-600">Gate</span></h1><p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">Simulador Oposiciones AI</p></div>
+                    <nav className="flex bg-slate-800 rounded-lg p-1 gap-1">
+                        <button onClick={() => setActiveTab('subjects')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'subjects' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.BookOpen size={16}/> <span className="hidden md:inline">Materias</span></button>
+                        <button onClick={() => setActiveTab('exam')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'exam' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Play size={16}/> <span className="hidden md:inline">Examen</span></button>
+                        <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Clock size={16}/> <span className="hidden md:inline">Histórico</span></button>
+                        <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.Settings size={16}/> <span className="hidden md:inline">Config</span></button>
+                    </nav>
+                </header>
+
+                <main className="flex-1 overflow-hidden relative">
+                    {activeTab === 'subjects' && <SubjectsTab subjects={subjects} setSubjects={setSubjects} activeSubjectId={activeSubjectId} setActiveSubjectId={setActiveSubjectId} />}
+                    {activeTab === 'exam' && (
+                        (!isAuth && trialExhausted) ? (
+                            <div className="h-full flex flex-col items-center justify-center p-6 text-center fade-in">
+                                <div className="max-w-md bg-slate-900 border border-red-900/50 p-8 rounded-3xl shadow-2xl">
+                                    <div className="inline-flex p-4 bg-red-500/10 text-red-500 rounded-full mb-6"><Icons.AlertTriangle size={48} /></div>
+                                    <h2 className="text-2xl font-display font-bold text-white mb-4 uppercase">PRUEBA FINALIZADA</h2>
+                                    <p className="text-slate-400 text-sm mb-6 leading-relaxed">Has completado tus 10 sesiones de cortesía.</p>
+                                    <button onClick={() => setActiveTab('settings')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg">INTRODUCIR REGISTRO</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <ExamTab activeSubject={activeSubject} session={examSession} setSession={setExamSession} isAuth={isAuth} trialCount={tc} setTc={setTc}
+                                onSaveResult={(r)=>{ setHistory(prev=>[r,...prev]); setActiveTab('history'); setExamSession({ status: 'idle', questions: [], answers: {}, currentIndex: 0, timeLeft: 0, autoNext: false, showGrid: false, batchQueue: [], loadingMsg: '', error: null }); }} 
+                            />
+                        )
+                    )}
+                    {activeTab === 'history' && <HistoryTab results={history} onClear={()=>setHistory([])} onDeleteOne={(i)=>setHistory(history.filter((_,idx)=>idx!==i))} activeSubject={activeSubject} onAddManual={(r)=>setHistory(prev=>[r,...prev])} onUpdateManual={handleUpdateManualHistory} setSubjects={setSubjects} setHistory={setHistory} />}
+                    {activeTab === 'settings' && <SettingsTab isAuth={isAuth} trialCount={tc} onActivate={handleActivate} />}
+                </main>
+
+                <footer className="shrink-0 bg-slate-900 border-t border-slate-800 py-1.5 px-6 flex justify-between items-center text-[8px] text-slate-600 font-bold uppercase">
+                    <div className="flex items-center gap-4">
+                        <span>BoardingGate Oposiciones v2026.6.1</span>
+                        <button 
+                            onClick={() => setIsLastPromptModalOpen(true)}
+                            className="text-blue-400 hover:text-blue-300 font-bold uppercase cursor-pointer border-l border-slate-800 pl-4 flex items-center gap-1.5 transition-colors"
+                            title="Ver último prompt limpio enviado a la iA"
+                        >
+                            <Icons.Copy size={10} className="inline"/> Último Prompt Ejecutado
+                        </button>
+                    </div>
+                </footer>
+
+                <Modal isOpen={isLastPromptModalOpen} title="Último Prompt Ejecutado (Tribunal de Oposición)" onClose={() => setIsLastPromptModalOpen(false)} size="lg">
+                    <div className="flex flex-col gap-4">
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            A continuación se expone la última consulta estructurada con los datos del simulacro, optimizada para copiar al portapapeles.
+                        </p>
+                        <div className="bg-yellow-950/20 border border-yellow-600/30 p-3 rounded-xl text-[11px] text-yellow-300 leading-snug">
+                            💡 <strong>TIP DE INTEGRACIÓN (MODELO EXTERNO):</strong> Si quieres generar y copiar tus prompts 
+                            <strong> sin realizar ni esperar la petición de pago vía API</strong>, selecciona el modelo 
+                            llamado exactamente <span className="font-mono bg-slate-950 px-1.5 py-0.5 rounded text-white font-bold">USAR MODELO EXTERNO</span>. 
+                            Al tenerlo seleccionado, el sistema interceptará la llamada para abrirte este visor de forma instantánea, permitiéndote copiar el prompt sin esperas ni costes.
+                        </div>
+                        <textarea 
+                            readOnly 
+                            value={window.lastBgPrompt || "Todavía no se ha ejecutado ninguna consulta a la IA en esta sesión de trabajo."} 
+                            className="w-full h-80 bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 focus:outline-none custom-scrollbar shadow-inner select-all"
+                            onClick={(e) => e.target.select()}
+                        />
+                        <div className="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-700">
+                            <span className="text-[9px] text-slate-500 italic">* Puedes hacer clic en el texto para seleccionarlo todo automáticamente.</span>
+                            <button 
+                                onClick={() => {
+                                    const txt = window.lastBgPrompt;
+                                    if (txt) {
+                                        navigator.clipboard.writeText(txt);
+                                        alert("✅ Prompt limpio copiado al portapapeles.");
+                                    } else {
+                                        alert("No hay ningún prompt registrado para copiar.");
+                                    }
+                                }} 
+                                className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-2 shadow-lg"
+                            >
+                                <Icons.Copy size={14}/> Copiar al Portapapeles
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            </div>
+        );
+    };
+
+    createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>

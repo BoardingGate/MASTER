@@ -228,7 +228,7 @@
           return "Actúa como un tribunal de oposición experto.\n\n" + cleaned;
       };
 
-      const askAI = async (geminiKey, secondaryApiKey, prompt, model) => {
+      const askAI = async (geminiKey, secondaryApiKey, prompt, model, useSearch = false) => {
           if (typeof window !== 'undefined') {
               window.lastBgPrompt = cleanPromptFromHtmlArtifacts(prompt);
           }
@@ -252,13 +252,16 @@
 
           if (isGeminiDirect) {
               if (!geminiKey) throw new Error("Falta API Key de Gemini");
+              const requestBody = {
+                  contents: [{ parts: [{ text: prompt }] }]
+              };
+              if (useSearch) {
+                  requestBody.tools = [{ google_search: {} }];
+              }
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${geminiKey}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                      contents: [{ parts: [{ text: prompt }] }], 
-                      tools: [{ google_search: {} }] 
-                  })
+                  body: JSON.stringify(requestBody)
               });
               const data = await response.json();
               if (data.error) throw new Error(data.error.message);
@@ -285,11 +288,11 @@
           }
       };
 
-      const askGemini = async (geminiKey, prompt) => {
+      const askGemini = async (geminiKey, prompt, useSearch = false) => {
           const secondaryApiKey = JSON.parse(window.localStorage.getItem('openrouter_api_key') || '""');
           const savedModel = window.localStorage.getItem('gemini_model');
           const model = savedModel ? JSON.parse(savedModel) : "gemini-3-flash-preview";
-          return await askAI(geminiKey, secondaryApiKey, prompt, model);
+          return await askAI(geminiKey, secondaryApiKey, prompt, model, useSearch);
       };
 
       const extractJSON = (text) => {
@@ -324,7 +327,7 @@
           const prompt = `Actúa como tribunal experto. Materia: "${subject.name}". ${contextInstruction} Genera ${amount} preguntas difíciles. Responde SOLO JSON: [{"question": "...", "options": ["A...", "B...", "C...", "D..."], "correct": 0, "explanation": "...", "topic": "NOMBRE_TEMA_EXACTO"}]`;
           
           try {
-              const rawText = await askGemini(apiKey, prompt);
+              const rawText = await askGemini(apiKey, prompt, false);
               const parsed = extractJSON(rawText);
               
               return parsed.map((q) => {
@@ -387,7 +390,7 @@
           });
       };
 
-const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
+      const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           const [apiKey, setApiKey] = usePersistentState('gemini_api_key', '');
           const [secondaryApiKey, setSecondaryApiKey] = usePersistentState('openrouter_api_key', '');
           const [model, setModel] = usePersistentState('gemini_model', 'gemini-3-flash-preview');
@@ -414,7 +417,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               if(!apiKey && !secondaryApiKey) return alert("Introduce una clave (Gemini o OpenRouter) primero.");
               setTestStatus('loading'); setErrorDetail('');
               try {
-                  const response = await askAI(apiKey, secondaryApiKey, "Test conexión. Responde OK si me recibes.", model);
+                  const response = await askAI(apiKey, secondaryApiKey, "Test conexión. Responde OK si me recibes.", model, false);
                   if(response) { setTestStatus('success'); } 
                   else { setTestStatus('error'); setErrorDetail("Respuesta vacía o error de red."); }
               } catch(e) { 
@@ -768,6 +771,8 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           );
       };
 
+BLOQUE 2: Componentes visuales restantes (Materias, Análisis, Examen, Historial, App) y cierre de la aplicación
+
       const SubjectsTab = ({ subjects, setSubjects, activeSubjectId, setActiveSubjectId }) => {
           const [isEditing, setIsEditing] = useState(false);
           const [editForm, setEditForm] = useState(null);
@@ -850,7 +855,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               if(!apiKey) return alert("Falta API Key de Gemini.");
               setSearchingDesc(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": pct_examen, "dg": nota_carrera, "dw": mult_carrera, "ex": extras}].`);
+                  const res = await askGemini(JSON.parse(apiKey), `Experto oposiciones. Info oficial: "${editForm.type || editForm.name}". JSON array: [{"label": "Nombre", "q": num, "t": mins, "c": corte, "o": ops, "last_date": "Y-M-D", "places": num, "cut_score": pts, "exam_link": "URL_PDF", "ew": pct_examen, "dg": nota_carrera, "dw": mult_carrera, "ex": extras}].`, true);
                   const list = extractJSON(res);
                   if(Array.isArray(list)) setDescResults(list.map(i => ({label: i.label||"?", q: parseInt(i.q)||200, t: parseInt(i.t)||270, c: parseInt(i.c)||90, o: parseInt(i.o)||4, last_date: i.last_date||'', places: parseInt(i.places)||0, cut_score: parseFloat(i.cut_score)||0, exam_link: i.exam_link||'', ew: i.ew||90, dg: i.dg||5, dw: i.dw||6, ex: i.ex||0}))); 
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingDesc(false); }
@@ -861,7 +866,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               if(!apiKey) return alert("Falta API Key de Gemini.");
               setSearchingLastCall(true);
               try {
-                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes. Intenta encontrar el enlace DIRECTO al .pdf del último examen de "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL", "ew": pct_examen, "dw": mult_carrera}.`);
+                  const res = await askGemini(JSON.parse(apiKey), `Buscador de exámenes. Intenta encontrar el enlace DIRECTO al .pdf del último examen de "${editForm.type || editForm.name}". Responde JSON: {"date": "YYYY-MM-DD", "places": num, "cutoff": puntos, "link": "URL", "ew": pct_examen, "dw": mult_carrera}.`, true);
                   const data = extractJSON(res);
                   if(data) setEditForm(prev => ({ ...prev, lastCallDate: data.date||prev.lastCallDate, lastCallPlaces: data.places||prev.lastCallPlaces, lastCallCutoff: data.cutoff||prev.lastCallCutoff, lastCallLink: data.link||prev.lastCallLink, includeLastCall: true, examWeight: data.ew||prev.examWeight, degreeWeight: data.dw||prev.degreeWeight }));
               } catch(e) { alert("Error: " + e.message); } finally { setSearchingLastCall(false); }
@@ -871,7 +876,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) return alert("Falta API Key de Gemini.");
               setGeneratingTopics(true);
-              try { const res = await askGemini(JSON.parse(apiKey), `Temario "${editForm.type}". JSON array: [{"name": "Tema", "pct": peso}].`); const list = extractJSON(res); if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list })); } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
+              try { const res = await askGemini(JSON.parse(apiKey), `Temario "${editForm.type || editForm.name}". JSON array: [{"name": "Tema", "pct": peso}].`, false); const list = extractJSON(res); if(Array.isArray(list)) setEditForm(prev => ({ ...prev, topics: list })); } catch(e) { alert("Error: " + e.message); } finally { setGeneratingTopics(false); }
           };
 
           if (isEditing) {
@@ -1086,16 +1091,16 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
           };
           const updateConsolidation = (orphan, field, value) => { setConsolidationMap(prev => ({ ...prev, [orphan]: { ...prev[orphan], [field]: value } })); };
 
-          const askAIWithLocals = async (prompt) => {
+          const askAIWithLocals = async (prompt, useSearch = false) => {
               const apiKey = window.localStorage.getItem('gemini_api_key');
               if(!apiKey) { alert("Falta API Key"); return null; }
               setLoading(true);
-              try { const text = await askGemini(JSON.parse(apiKey), prompt); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
+              try { const text = await askGemini(JSON.parse(apiKey), prompt, useSearch); return text; } catch(e) { alert(e.message); return null; } finally { setLoading(false); }
           };
 
           const getAdvice = async () => {
               const summary = analysis.map(i => `${i.name}: ${i.rate.toFixed(1)}%`).join(', ');
-              const text = await askAIWithLocals(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`);
+              const text = await askAIWithLocals(`Actúa como tutor. Analiza: [${summary}]. Dame 3 consejos MUY breves, concisos y directos. Máximo 2 frases por consejo.`, false);
               if(text) setAiAdvice(text);
           };
 
@@ -1110,7 +1115,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               CRITERIO: Asigna mucho peso (incluso 100% si es necesario) a los temas con PEOR nota o menos preguntas. Pon 0% a los temas dominados.
               Responde ÚNICAMENTE un array JSON válido: [{"name": "NombreTema", "pct": numero}, ...] (Suma 100)`;
 
-              const res = await askAIWithLocals(prompt);
+              const res = await askAIWithLocals(prompt, false);
               if(res) { 
                   const json = extractJSON(res); 
                   if(Array.isArray(json)) { setProposedWeights(json); setShowRebalance(true); } 
@@ -1291,7 +1296,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
                   const firstBatch = queue[0];
                   let sc = { type: firstBatch.type, name: firstBatch.name, content: '', customTopics: firstBatch.customTopics };
                   if (firstBatch.type === 'pdf') { const dbData = await getFromDB(firstBatch.id); sc.content = (dbData && dbData.text) ? dbData.text : ''; }
-                  const initialQs = await fetchBatch(apiKey, firstBatch.amount, 0, sc);
+                  const initialQs = await fetchBatch(apiKey, activeSubject, firstBatch.amount, 0, sc);
                   updateState({ questions: initialQs.map((q, i) => ({ ...q, id: i })), batchQueue: queue.slice(1), status: 'active', timeLeft: activeSubject.timeMinutes * 60, currentIndex: 0, answers: {} });
               } catch (e) { updateState({ error: "Error: " + e.message, status: 'idle' }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
           };
@@ -1302,7 +1307,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               setLoadingDeepDive(true); setShowDeepDive(true); setDeepDiveContent('');
               try {
                   const prompt = `Actúa como preparador. Pregunta: "${currentQ.question}". Correcta: "${currentQ.options[currentQ.correct]}". Reglas: 1. Sin saludos. 2. Usa UNICODE (→, ✅). 3. Bloques: 📘 FUNDAMENTO TEÓRICO y 🧠 CLAVE DE MEMORIZACIÓN.`;
-                  const text = await askGemini(apiKey, prompt);
+                  const text = await askGemini(apiKey, prompt, false);
                   setDeepDiveContent(text);
               } catch (e) { setDeepDiveContent("Error al conectar con la IA."); } finally { setLoadingDeepDive(false); }
           };
@@ -1352,7 +1357,7 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
               try {
                   let sourceConfig = { type: nextBatch.type, name: nextBatch.name, content: '', customTopics: nextBatch.customTopics };
                   if (nextBatch.type === 'pdf') { const dbData = await getFromDB(nextBatch.id); sourceConfig.content = (dbData && dbData.text) ? dbData.text : ''; }
-                  const newQs = await fetchBatch(apiKey, nextBatch.amount, questions.length, sourceConfig); 
+                  const newQs = await fetchBatch(apiKey, activeSubject, nextBatch.amount, questions.length, sourceConfig); 
                   if (newQs.length > 0) { updateState({ questions: [...questions, ...newQs.map((q, i) => ({ ...q, id: questions.length + i }))], batchQueue: batchQueue.slice(1) }); } 
                   else { updateState({ batchQueue: batchQueue.slice(1) }); }
               } catch (e) { console.error(e); updateState({ batchQueue: batchQueue.slice(1) }); } finally { setTimeout(() => { isFetchingRef.current = false; }, 4000); }
@@ -1369,6 +1374,13 @@ const SettingsTab = ({ isAuth, trialCount, onActivate }) => {
                         <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-2xl">
                             <h2 className="text-3xl font-display font-bold text-white mb-2">{activeSubject.name}</h2>
                             <p className="text-slate-400 mb-8">{activeSubject.type}</p>
+                            
+                            {error && (
+                                <div className="mb-6 p-4 bg-red-950/40 border border-red-500/50 rounded-xl text-red-200 text-xs text-left font-mono whitespace-pre-wrap">
+                                    <strong>Error al iniciar examen:</strong> {error}
+                                </div>
+                            )}
+
                             <div className="flex justify-center gap-4 mb-8">
                                 {activeSubject.files?.length > 0 && <div className="bg-blue-900/30 border border-blue-500/50 px-4 py-2 rounded-lg text-sm text-blue-200 flex items-center gap-2"><Icons.FileText size={18}/> {activeSubject.files.length} PDF(s)</div>}
                                 {activeSubject.includeLastCall && <div className="bg-purple-900/30 border border-purple-500/50 px-4 py-2 rounded-lg text-sm text-purple-200 flex items-center gap-2"><Icons.Clock size={18}/> Convocatoria</div>}

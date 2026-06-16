@@ -2057,18 +2057,26 @@
 
     createRoot(document.getElementById('root')).render(<App />);
     </script>
+
     <script>
-          window.addEventListener('DOMContentLoaded', () => {
-            const code = document.getElementById('react-app').textContent;
-            try {
-              const transformed = Babel.transform(code, { presets: ['react'] }).code;
-              eval(transformed);
-            } catch (err) {
-              console.error("Error al compilar React:", err);
-              document.getElementById('error-display').style.display = 'block';
-              document.getElementById('error-display').innerHTML = '<strong>Error de Transpilación:</strong><br>' + err.message;
-            }
-          });
-   </script>
-</body>
+  window.addEventListener('DOMContentLoaded', () => {
+    const code = document.getElementById('react-app').textContent;
+    try {
+      // Configuramos Babel para que NO use módulos y sea compatible con el navegador
+      const transformed = Babel.transform(code, { 
+        presets: [
+          ['react', { "pragma": "React.createElement" }],
+          ['env', { "modules": false }] // <--- ESTO ES LO QUE ELIMINA EL ERROR DE IMPORT
+        ]
+      }).code;
+      
+      eval(transformed);
+    } catch (err) {
+      console.error("Error al compilar React:", err);
+      document.getElementById('error-display').style.display = 'block';
+      document.getElementById('error-display').innerHTML = '<strong>Error de Transpilación:</strong><br>' + err.message;
+    }
+  });
+</script>
+ </body>
 </html>

@@ -2057,16 +2057,17 @@
 
     createRoot(document.getElementById('root')).render(<App />);
     </script>
-
-    <script>
+<script>
   window.addEventListener('DOMContentLoaded', () => {
     const code = document.getElementById('react-app').textContent;
     try {
-      // Configuramos Babel para que NO use módulos y sea compatible con el navegador
+      // Ajustamos el preset de react para usar el runtime clásico
       const transformed = Babel.transform(code, { 
         presets: [
-          ['react', { "pragma": "React.createElement" }],
-          ['env', { "modules": false }] // <--- ESTO ES LO QUE ELIMINA EL ERROR DE IMPORT
+          ['react', { 
+            "runtime": "classic"  // <--- ESTO ELIMINA EL ERROR DE "runtime is automatic"
+          }],
+          ['env', { "modules": false }]
         ]
       }).code;
       
